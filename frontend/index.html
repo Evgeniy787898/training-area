@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Convict Conditioning Demo</title>
+  <style>
+    body { font-family: "Segoe UI", Arial, sans-serif; margin: 2rem; background: #f7f7f9; }
+    h1 { margin-top: 0; }
+    section { background: #fff; padding: 1.5rem; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 1.5rem; }
+    button { cursor: pointer; padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid #0077cc; background: #0d84ff; color: #fff; }
+    button:disabled { opacity: 0.6; cursor: wait; }
+    table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+    th, td { border: 1px solid #d4d4dd; padding: 0.5rem; text-align: left; }
+    th { background: #f0f4ff; }
+    label { display: block; margin-top: 0.75rem; }
+    input, select, textarea { width: 100%; padding: 0.4rem; border: 1px solid #ccc; border-radius: 4px; }
+    textarea { resize: vertical; min-height: 70px; }
+    .status { font-size: 0.9rem; margin-top: 0.5rem; color: #555; }
+    .log { font-family: "Fira Mono", monospace; font-size: 0.85rem; background: #f3f3f7; padding: 0.75rem; border-radius: 8px; max-height: 200px; overflow-y: auto; }
+  </style>
+</head>
+<body>
+  <h1>Convict Conditioning API Demo</h1>
+  <p>Заполните конфигурацию <code>WEBAPP_URL</code> и <code>API_KEY</code> перед использованием.</p>
+
+  <section>
+    <h2>План на сегодня</h2>
+    <button id="refresh-plan">Обновить</button>
+    <div class="status" id="plan-status"></div>
+    <table>
+      <thead>
+        <tr><th>Упражнение</th><th>Уровень</th><th>Название уровня</th><th>Сеты×Повторы</th><th>Статус</th></tr>
+      </thead>
+      <tbody id="plan-body"></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Добавить тренировку</h2>
+    <form id="log-form">
+      <label>Дата
+        <input type="date" name="Дата" required />
+      </label>
+      <label>Упражнение
+        <select name="Упражнение" required>
+          <option value="Подтягивания">Подтягивания</option>
+          <option value="Приседания">Приседания</option>
+          <option value="Отжимания">Отжимания</option>
+          <option value="Подъёмы ног">Подъёмы ног</option>
+          <option value="Мостик">Мостик</option>
+          <option value="Отжимания в стойке на руках">Отжимания в стойке на руках</option>
+        </select>
+      </label>
+      <label>ID плана (если есть)
+        <input type="text" name="ID_Плана" placeholder="20240101-Pod1" />
+      </label>
+      <label>Уровень
+        <input type="text" name="Уровень" placeholder="2.1" required />
+      </label>
+      <label>Сеты (через запятую)
+        <input type="text" name="Сеты" placeholder="10,10,8" required />
+      </label>
+      <label>RPE
+        <input type="number" name="RPE" min="1" max="10" />
+      </label>
+      <label>Итог
+        <select name="Итог" required>
+          <option value="выполнено">выполнено</option>
+          <option value="перевыполнено">перевыполнено</option>
+          <option value="не выполнено">не выполнено</option>
+        </select>
+      </label>
+      <label>Примечание
+        <textarea name="Примечание" placeholder="Комментарии"></textarea>
+      </label>
+      <button type="submit">Отправить лог</button>
+    </form>
+    <div class="status" id="log-status"></div>
+  </section>
+
+  <section>
+    <h2>Уровни упражнения</h2>
+    <label>Выберите упражнение
+      <select id="levels-select">
+        <option value="Подтягивания">Подтягивания</option>
+        <option value="Приседания">Приседания</option>
+        <option value="Отжимания">Отжимания</option>
+        <option value="Подъёмы ног">Подъёмы ног</option>
+        <option value="Мостик">Мостик</option>
+        <option value="Отжимания в стойке на руках">Отжимания в стойке на руках</option>
+      </select>
+    </label>
+    <button id="load-levels">Показать уровни</button>
+    <div class="status" id="levels-status"></div>
+    <div class="log" id="levels-log"></div>
+  </section>
+
+  <script>
+    const WEBAPP_URL = 'https://script.google.com/macros/s/DEPLOYMENT_ID/exec';
+    const API_KEY = 'YOUR_API_KEY';
+
+    function isoToday() {
+      const date = new Date();
+      const tzOffset = date.getTimezoneOffset();
+      const local = new Date(date.getTime() - tzOffset * 60000);
+      return local.toISOString().slice(0, 10);
+    }
+
+    async function apiRequest(path, params = {}, method = 'GET') {
+      const url = new URL(WEBAPP_URL);
+      url.searchParams.set('path', path);
+      if (method === 'GET') {
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== '') {
+            url.searchParams.set(key, value);
+          }
+        });
+      }
+      const options = {
+        method,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      };
+      if (API_KEY) {
+        options.headers['X-API-Key'] = API_KEY;
+      }
+      if (method !== 'GET') {
+        options.body = JSON.stringify(params);
+      }
+      const response = await fetch(url.toString(), options);
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || response.statusText);
+      }
+      return response.json();
+    }
+
+    async function loadPlan() {
+      const today = isoToday();
+      const status = document.getElementById('plan-status');
+      const body = document.getElementById('plan-body');
+      status.textContent = 'Загружаем…';
+      body.innerHTML = '';
+      try {
+        const data = await apiRequest('plan', { from: today, to: today });
+        if (!data.items || !data.items.length) {
+          status.textContent = 'На сегодня план не найден.';
+          return;
+        }
+        data.items.forEach(item => {
+          const tr = document.createElement('tr');
+          const setsXreps = `${item['Подходы_план']}×${item['Повторы_план']}`;
+          tr.innerHTML = `<td>${item['Упражнение']}</td>` +
+                         `<td>${item['Уровень']}</td>` +
+                         `<td>${item['Название уровня'] || ''}</td>` +
+                         `<td>${setsXreps}</td>` +
+                         `<td>${item['Статус'] || ''}</td>`;
+          body.appendChild(tr);
+        });
+        status.textContent = `Найдено записей: ${data.items.length}`;
+      } catch (err) {
+        status.textContent = `Ошибка: ${err.message}`;
+      }
+    }
+
+    async function submitLog(event) {
+      event.preventDefault();
+      const form = event.target;
+      const formData = new FormData(form);
+      const payload = Object.fromEntries(formData.entries());
+      const status = document.getElementById('log-status');
+      status.textContent = 'Отправляем…';
+      try {
+        const result = await apiRequest('log', payload, 'POST');
+        status.textContent = `Успешно. Решение: ${result.decision}, объём: ${result.volume}`;
+        form.reset();
+        form.querySelector('[name="Дата"]').value = isoToday();
+        await loadPlan();
+      } catch (err) {
+        status.textContent = `Ошибка: ${err.message}`;
+      }
+    }
+
+    async function loadLevels() {
+      const select = document.getElementById('levels-select');
+      const status = document.getElementById('levels-status');
+      const log = document.getElementById('levels-log');
+      status.textContent = 'Загружаем…';
+      log.textContent = '';
+      try {
+        const data = await apiRequest('levels', { exercise: select.value });
+        log.textContent = data.levels
+          .map(level => `${level.level} — ${level.name} (${level.sets}×${level.reps})`)
+          .join('\n');
+        status.textContent = `Всего уровней: ${data.levels.length}`;
+      } catch (err) {
+        status.textContent = `Ошибка: ${err.message}`;
+      }
+    }
+
+    document.getElementById('refresh-plan').addEventListener('click', loadPlan);
+    document.getElementById('log-form').addEventListener('submit', submitLog);
+    document.getElementById('load-levels').addEventListener('click', loadLevels);
+
+    document.getElementById('log-form').querySelector('[name="Дата"]').value = isoToday();
+    loadPlan();
+  </script>
+</body>
+</html>

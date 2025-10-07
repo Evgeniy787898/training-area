@@ -15,6 +15,7 @@
   3. `Название уровня` (строка).
   4. `Подходы_план` (целое число ≥1).
   5. `Повторы_план` (целое число ≥1).
+- **Готовый CSV для импорта:** `data/levels.csv` (UTF-8, разделитель `,`).
 - **Полный справочник уровней (демо-заполнение):**
 
 #### Подтягивания
@@ -231,7 +232,7 @@
 - **Назначение:** ручной шаблон «идеальной» недели (6 тренировочных дней × 2 движения/день).
 - **Диапазон:** `A:I`.
 - **Колонки и типы:**
-  1. `День` (текст: Пн, Вт, Ср, Чт, Пт, Сб; можно добавить Вс для активного восстановления).
+  1. `День` (текст: Пн, Вт, Ср, Чт, Пт, Сб — допускаются и полные формы «Понедельник», «Вторник» и т.д.; можно добавить Вс для активного восстановления).
   2. `Упр1` (список 6 движений — валидация).
   3. `Уровень1` (Plain text `X.Y`).
   4. `Упр2`.
@@ -242,16 +243,17 @@
   9. `Название уровня2` (формула, авто).
   10. `Подходы2` (формула, авто).
   11. `Повторы2` (формула, авто).
+- **Готовый CSV-шаблон:** `data/weekly_program.csv` (Plain text уровней перед импортом).
 - **Пример строк:**
 
 | День | Упр1 | Уровень1 | Упр2 | Уровень2 | Название уровня1* | Подходы1* | Повторы1* | Название уровня2* | Подходы2* | Повторы2* |
 |------|------|----------|------|----------|--------------------|-----------|-----------|--------------------|-----------|-----------|
-| Пн | Подтягивания | 1.1 | Приседания | 1.1 | Вертикальные подтягивания | 1 | 10 | Приседания в стойке на плечах | 1 | 10 |
-| Вт | Отжимания | 1.1 | Подъёмы ног | 1.1 | Отжимания от стены | 1 | 10 | Подтягивание коленей к груди | 1 | 10 |
-| Ср | Отжимания в стойке на руках | 1.1 | Мостик | 1.1 | Стойка на голове у стены | 1 | 30 | "Мостик" от плеч | 1 | 10 |
-| Чт | Подтягивания | 1.1 | Приседания | 1.1 | Вертикальные подтягивания | 1 | 10 | Приседания в стойке на плечах | 1 | 10 |
-| Пт | Отжимания | 1.1 | Подъёмы ног | 1.1 | Отжимания от стены | 1 | 10 | Подтягивание коленей к груди | 1 | 10 |
-| Сб | Отжимания в стойке на руках | 1.1 | Мостик | 1.1 | Стойка на голове у стены | 1 | 30 | "Мостик" от плеч | 1 | 10 |
+| Понедельник | Подтягивания | 1.1 | Приседания | 1.1 | Вертикальные подтягивания | 1 | 10 | Приседания в стойке на плечах | 1 | 10 |
+| Вторник | Отжимания | 1.1 | Подъёмы ног | 1.1 | Отжимания от стены | 1 | 10 | Подтягивание коленей к груди | 1 | 10 |
+| Среда | Отжимания в стойке на руках | 1.1 | Мостик | 1.1 | Стойка на голове у стены | 1 | 30 | "Мостик" от плеч | 1 | 10 |
+| Четверг | Подтягивания | 1.1 | Приседания | 1.1 | Вертикальные подтягивания | 1 | 10 | Приседания в стойке на плечах | 1 | 10 |
+| Пятница | Отжимания | 1.1 | Подъёмы ног | 1.1 | Отжимания от стены | 1 | 10 | Подтягивание коленей к груди | 1 | 10 |
+| Суббота | Отжимания в стойке на руках | 1.1 | Мостик | 1.1 | Стойка на голове у стены | 1 | 30 | "Мостик" от плеч | 1 | 10 |
 
 \*—колонки, заполняемые формулами `INDEX/FILTER` (или `XLOOKUP`).
 
@@ -390,10 +392,9 @@
 ```javascript
 /**
  * Convict Conditioning Progression Tracker
- * Web App (REST API) for Google Sheets backend.
+ * Google Apps Script Web App backend for Google Sheets.
  */
 
-// ====== Константы ======
 const CONFIG = {
   SPREADSHEET_ID: SpreadsheetApp.getActive().getId(),
   SHEETS: {
@@ -419,7 +420,23 @@ const EXERCISE_CODES = {
   'Отжимания в стойке на руках': 'Hsp'
 };
 
-// ====== Утилиты ======
+const DAY_NAME_MAP = {
+  'Пн': 'Пн',
+  'Понедельник': 'Пн',
+  'Вт': 'Вт',
+  'Вторник': 'Вт',
+  'Ср': 'Ср',
+  'Среда': 'Ср',
+  'Чт': 'Чт',
+  'Четверг': 'Чт',
+  'Пт': 'Пт',
+  'Пятница': 'Пт',
+  'Сб': 'Сб',
+  'Суббота': 'Сб',
+  'Вс': 'Вс',
+  'Воскресенье': 'Вс'
+};
+
 function respond(status, payload) {
   return ContentService
     .createTextOutput(JSON.stringify(payload, null, 2))
@@ -430,8 +447,8 @@ function respond(status, payload) {
 function parseJson(body) {
   try {
     return JSON.parse(body || '{}');
-  } catch (e) {
-    throw createError(400, 'Invalid JSON payload', e.message, 'Проверьте синтаксис JSON.');
+  } catch (err) {
+    throw createError(400, 'Invalid JSON payload', err.message, 'Проверьте синтаксис JSON.');
   }
 }
 
@@ -439,12 +456,25 @@ function createError(code, message, details, hint) {
   return { code, message, details, hint };
 }
 
-function ensureApiKey(e) {
-  const key = e?.parameter?.key || e?.parameter?.apiKey || e?.headers?.[CONFIG.HEADER_API_KEY] || e?.postData?.headers?.[CONFIG.HEADER_API_KEY];
-  if (!CONFIG.API_KEY) {
-    return; // режим A (OAuth) — проверка не нужна, доступ через авторизацию владельца.
+function getPathFromEvent(e) {
+  if (e?.pathInfo) {
+    return String(e.pathInfo).replace(/^\/+/, '');
   }
-  if (!key || key !== CONFIG.API_KEY) {
+  if (e?.parameter?.path) {
+    return String(e.parameter.path).replace(/^\/+/, '');
+  }
+  return '';
+}
+
+function ensureApiKey(e) {
+  if (!CONFIG.API_KEY) {
+    return; // режим A — OAuth, проверка API ключа не требуется
+  }
+  const headerKey = e?.headers?.[CONFIG.HEADER_API_KEY];
+  const postHeaderKey = e?.postData?.headers?.[CONFIG.HEADER_API_KEY];
+  const paramKey = e?.parameter?.key || e?.parameter?.apiKey;
+  const provided = headerKey || postHeaderKey || paramKey;
+  if (!provided || provided !== CONFIG.API_KEY) {
     throw createError(401, 'Unauthorized', 'Missing or invalid API key', `Передайте заголовок ${CONFIG.HEADER_API_KEY}`);
   }
 }
@@ -452,40 +482,42 @@ function ensureApiKey(e) {
 function getSheet(name) {
   const sheet = SpreadsheetApp.getActive().getSheetByName(name);
   if (!sheet) {
-    throw createError(500, 'Sheet not found', name, 'Проверьте наличие листа');
+    throw createError(500, 'Sheet not found', name, 'Проверьте, что лист существует.');
   }
   return sheet;
 }
 
+function getHeaders(sheet) {
+  return sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+}
+
 function readTable(sheetName) {
   const sheet = getSheet(sheetName);
-  const data = sheet.getDataRange().getValues();
-  const headers = data.shift();
-  return data.filter(row => row.some(v => v !== '')).map(row => Object.fromEntries(headers.map((h, i) => [h, row[i]])));
+  if (sheet.getLastRow() < 2) {
+    return [];
+  }
+  const range = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn());
+  const values = range.getValues();
+  const headers = values.shift();
+  return values
+    .map(row => Object.fromEntries(headers.map((h, idx) => [h, row[idx]])))
+    .filter(row => Object.values(row).some(value => value !== '' && value !== null));
 }
 
 function appendRow(sheetName, rowObj) {
   const sheet = getSheet(sheetName);
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const row = headers.map(h => rowObj[h] ?? '');
+  const headers = getHeaders(sheet);
+  const row = headers.map(header => rowObj.hasOwnProperty(header) ? rowObj[header] : '');
   sheet.appendRow(row);
 }
 
-function getLevelMap() {
-  const rows = readTable(CONFIG.SHEETS.LEVELS);
-  const map = {};
-  rows.forEach(r => {
-    const key = `${r['Упражнение']}|${String(r['Уровень'])}`;
-    map[key] = r;
-  });
-  return map;
-}
-
 function sanitizeLevel(level) {
-  if (typeof level !== 'string') level = String(level);
+  if (typeof level !== 'string') {
+    level = String(level);
+  }
   const trimmed = level.trim();
   if (!/^\d+\.\d+$/.test(trimmed)) {
-    throw createError(400, 'Invalid level format', level, 'Используйте X.Y (например, 4.2)');
+    throw createError(400, 'Invalid level format', level, 'Используйте формат X.Y (например, 4.2).');
   }
   return trimmed;
 }
@@ -506,123 +538,147 @@ function previousSublevel(level) {
   return `${Math.max(major - 1, 1)}.3`;
 }
 
+function normalizeDayName(day) {
+  if (!day && day !== 0) {
+    return '';
+  }
+  const normalized = DAY_NAME_MAP[String(day).trim()] || String(day).trim();
+  return normalized;
+}
+
+function parseIsoDate(input) {
+  if (!input) {
+    throw createError(400, 'Missing date value', input, 'Передайте дату в формате YYYY-MM-DD.');
+  }
+  const date = new Date(input);
+  if (isNaN(date.getTime())) {
+    throw createError(400, 'Invalid date format', input, 'Используйте ISO формат YYYY-MM-DD.');
+  }
+  return date;
+}
+
+function getLevelMap() {
+  const rows = readTable(CONFIG.SHEETS.LEVELS);
+  const map = {};
+  rows.forEach(row => {
+    const key = `${row['Упражнение']}|${sanitizeLevel(row['Уровень'])}`;
+    map[key] = row;
+  });
+  return map;
+}
+
 function getPlanId(date, exercise, index) {
   const code = EXERCISE_CODES[exercise] || exercise.substring(0, 3);
   return `${Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyyMMdd')}-${code}${index}`;
 }
 
 function updatePlanStatusById(id, status) {
-  if (!id) return;
+  if (!id) {
+    return;
+  }
   const sheet = getSheet(CONFIG.SHEETS.WEEK_PLAN);
-  const range = sheet.getDataRange();
-  const values = range.getValues();
-  const statusCol = values[0].indexOf('Статус');
-  const idCol = values[0].indexOf('ID_Плана');
-  for (let i = 1; i < values.length; i++) {
+  const headers = getHeaders(sheet);
+  const idCol = headers.indexOf('ID_Плана');
+  const statusCol = headers.indexOf('Статус');
+  if (idCol === -1 || statusCol === -1) {
+    return;
+  }
+  const rows = sheet.getLastRow();
+  if (rows < 2) {
+    return;
+  }
+  const values = sheet.getRange(2, 1, rows - 1, sheet.getLastColumn()).getValues();
+  for (let i = 0; i < values.length; i++) {
     if (values[i][idCol] === id) {
-      sheet.getRange(i + 1, statusCol + 1).setValue(status);
+      sheet.getRange(i + 2, statusCol + 1).setValue(status);
       break;
     }
   }
 }
 
+function inferDecision(history, entry) {
+  const outcome = entry['Итог'];
+  const rpe = Number(entry['RPE']);
+  if (outcome === 'перевыполнено' || (!isNaN(rpe) && rpe > 0 && rpe <= 7)) {
+    return 'вверх';
+  }
+  if (outcome === 'не выполнено') {
+    const last = history.slice(-1)[0];
+    if (last && last['Итог'] === 'не выполнено') {
+      return 'делоад';
+    }
+    return 'держать';
+  }
+  if (outcome === 'выполнено') {
+    const last = history.slice(-1)[0];
+    if (last && last['Итог'] === 'выполнено') {
+      return 'вверх';
+    }
+  }
+  return 'держать';
+}
+
 function updateProfileFromLog(entry) {
   const sheet = getSheet(CONFIG.SHEETS.PROFILE);
-  const range = sheet.getDataRange();
-  const values = range.getValues();
-  const headers = values[0];
+  const headers = getHeaders(sheet);
   const exerciseCol = headers.indexOf('Упражнение');
   const levelCol = headers.indexOf('Текущий_уровень');
   const lastDateCol = headers.indexOf('Дата_последней_сессии');
   const streakCol = headers.indexOf('Срывов_подряд');
   const recCol = headers.indexOf('Рекомендация');
+  const rows = sheet.getLastRow();
+  const values = rows >= 2 ? sheet.getRange(2, 1, rows - 1, sheet.getLastColumn()).getValues() : [];
+  const exercise = entry['Упражнение'];
+  const currentLevel = sanitizeLevel(entry['Уровень']);
   const decision = entry['Решение_прогрессии'];
+  const outcome = entry['Итог'];
+  const workoutDate = parseIsoDate(entry['Дата']);
 
-  for (let i = 1; i < values.length; i++) {
-    if (values[i][exerciseCol] === entry['Упражнение']) {
-      const newValues = [];
-      const row = i + 1;
+  for (let i = 0; i < values.length; i++) {
+    if (values[i][exerciseCol] === exercise) {
+      let nextLevel = values[i][levelCol] || currentLevel;
+      let streak = Number(values[i][streakCol]) || 0;
       if (decision === 'вверх') {
-        const next = nextSublevel(entry['Уровень']);
-        newValues.push({ col: levelCol + 1, value: next });
-        newValues.push({ col: streakCol + 1, value: 0 });
-        newValues.push({ col: recCol + 1, value: 'держать' });
+        nextLevel = nextSublevel(currentLevel);
+        streak = 0;
       } else if (decision === 'делоад') {
-        const prev = previousSublevel(entry['Уровень']);
-        newValues.push({ col: levelCol + 1, value: prev });
-        newValues.push({ col: streakCol + 1, value: 0 });
-        newValues.push({ col: recCol + 1, value: 'держать' });
+        nextLevel = previousSublevel(currentLevel);
+        streak = 0;
+      } else if (outcome === 'не выполнено') {
+        streak += 1;
       } else {
-        const streak = decision === 'не выполнено' ? (Number(values[i][streakCol]) || 0) + 1 : 0;
-        newValues.push({ col: streakCol + 1, value: streak });
-        newValues.push({ col: recCol + 1, value: decision });
+        streak = 0;
       }
-      newValues.push({ col: lastDateCol + 1, value: entry['Дата'] });
-      newValues.forEach(({ col, value }) => sheet.getRange(row, col).setValue(value));
+      sheet.getRange(i + 2, levelCol + 1).setValue(nextLevel);
+      sheet.getRange(i + 2, streakCol + 1).setValue(streak);
+      sheet.getRange(i + 2, recCol + 1).setValue(decision);
+      sheet.getRange(i + 2, lastDateCol + 1).setValue(workoutDate);
       return;
     }
   }
-  // Если упражнения нет — добавляем
+
   appendRow(CONFIG.SHEETS.PROFILE, {
-    'Упражнение': entry['Упражнение'],
-    'Текущий_уровень': entry['Уровень'],
-    'Дата_последней_сессии': entry['Дата'],
-    'Срывов_подряд': entry['Итог'] === 'не выполнено' ? 1 : 0,
-    'Рекомендация': entry['Решение_прогрессии'] || 'держать'
+    'Упражнение': exercise,
+    'Текущий_уровень': decision === 'вверх' ? nextSublevel(currentLevel) : (decision === 'делоад' ? previousSublevel(currentLevel) : currentLevel),
+    'Дата_последней_сессии': workoutDate,
+    'Срывов_подряд': outcome === 'не выполнено' ? 1 : 0,
+    'Рекомендация': decision
   });
 }
 
-function computeDecision(logEntry) {
-  const outcome = logEntry['Итог'];
-  const rpe = Number(logEntry['RPE']);
-  if (outcome === 'перевыполнено' || (rpe && rpe <= 7)) {
-    return 'вверх';
-  }
-  if (outcome === 'не выполнено') {
-    return 'делоад';
-  }
-  if (outcome === 'выполнено' && logEntry['Повтор'] && Number(logEntry['Повтор']) >= 2) {
-    return 'вверх';
-  }
-  return 'держать';
-}
-
-function inferDecision(history, currentEntry) {
-  const outcome = currentEntry['Итог'];
-  const rpe = Number(currentEntry['RPE']);
-  if (outcome === 'перевыполнено' || (rpe && rpe <= 7)) {
-    return 'вверх';
-  }
-  if (outcome === 'не выполнено') {
-    const lastTwo = history.slice(-1).filter(e => e['Итог'] === 'не выполнено');
-    return lastTwo.length >= 1 ? 'делоад' : 'держать';
-  }
-  const lastTwoCompleted = history.slice(-1).filter(e => e['Итог'] === 'выполнено');
-  if (outcome === 'выполнено' && lastTwoCompleted.length >= 1) {
-    return 'вверх';
-  }
-  return 'держать';
-}
-
-// ====== Обработчики ======
 function doGet(e) {
   try {
     ensureApiKey(e);
-    const path = e?.parameter?.path || (e?.pathInfo ? e.pathInfo.replace(/^\//, '') : '');
-    switch (path || (e?.parameter?.levels !== undefined ? 'levels' : e?.parameter?.plan !== undefined ? 'plan' : '')) {
-      case 'levels':
-      case 'levels?':
-        return handleGetLevels(e);
-      case 'plan':
-        return handleGetPlan(e);
-      default:
-        const action = (e?.parameter?.action || '').toLowerCase();
-        if (action === 'levels') return handleGetLevels(e);
-        if (action === 'plan') return handleGetPlan(e);
-        return respond(200, { status: 'ok', message: 'Convict Conditioning API' });
+    const path = getPathFromEvent(e);
+    if (path === 'levels' || e?.parameter?.levels !== undefined) {
+      return handleGetLevels(e);
     }
+    if (path === 'plan' || e?.parameter?.plan !== undefined) {
+      return handleGetPlan(e);
+    }
+    return respond(200, { status: 'ok', message: 'Convict Conditioning API' });
   } catch (err) {
-    const error = err.code ? err : createError(500, 'Internal error', err.message, 'Проверьте логи');
+    const error = err.code ? err : createError(500, 'Internal error', err.message, 'Проверьте логи.');
     return respond(error.code, { error: error.message, details: error.details, hint: error.hint });
   }
 }
@@ -630,7 +686,7 @@ function doGet(e) {
 function doPost(e) {
   try {
     ensureApiKey(e);
-    const path = e?.parameter?.path || (e?.pathInfo ? e.pathInfo.replace(/^\//, '') : '');
+    const path = getPathFromEvent(e);
     const body = parseJson(e?.postData?.contents);
     switch (path) {
       case 'log':
@@ -642,101 +698,118 @@ function doPost(e) {
       case 'generate-week':
         return handlePostGenerateWeek(body);
       default:
-        throw createError(404, 'Unknown endpoint', path, 'Используйте /log, /test, /advance, /generate-week');
+        throw createError(404, 'Unknown endpoint', path, 'Доступные пути: levels, plan, log, test, advance, generate-week.');
     }
   } catch (err) {
-    const error = err.code ? err : createError(500, 'Internal error', err.message, 'Проверьте логи');
+    const error = err.code ? err : createError(500, 'Internal error', err.message, 'Проверьте логи.');
     return respond(error.code, { error: error.message, details: error.details, hint: error.hint });
   }
 }
 
-// ====== Эндпойнты ======
 function handleGetLevels(e) {
-  const exercise = e.parameter.exercise;
+  const exercise = e?.parameter?.exercise;
   if (!exercise) {
     throw createError(400, 'Missing exercise parameter', null, 'Пример: ?exercise=Подтягивания');
   }
   const levels = readTable(CONFIG.SHEETS.LEVELS)
-    .filter(r => r['Упражнение'] === exercise)
-    .map(r => ({
-      level: String(r['Уровень']),
-      name: r['Название уровня'],
-      sets: Number(r['Подходы_план']),
-      reps: Number(r['Повторы_план'])
+    .filter(row => row['Упражнение'] === exercise)
+    .map(row => ({
+      level: sanitizeLevel(row['Уровень']),
+      name: row['Название уровня'],
+      sets: Number(row['Подходы_план']),
+      reps: Number(row['Повторы_план'])
     }));
   if (!levels.length) {
-    throw createError(404, 'Levels not found', exercise, 'Проверьте название упражнения');
+    throw createError(404, 'Levels not found', exercise, 'Проверьте название упражнения или заполните справочник.');
   }
   return respond(200, { exercise, levels });
 }
 
 function handleGetPlan(e) {
-  const from = e.parameter.from;
-  const to = e.parameter.to;
+  const from = e?.parameter?.from;
+  const to = e?.parameter?.to;
   if (!from || !to) {
-    throw createError(400, 'Missing date range', { from, to }, 'Добавьте from=YYYY-MM-DD&to=YYYY-MM-DD');
+    throw createError(400, 'Missing date range', { from, to }, 'Передайте from=YYYY-MM-DD&to=YYYY-MM-DD.');
   }
-  const fromDate = new Date(from);
-  const toDate = new Date(to);
-  if (isNaN(fromDate) || isNaN(toDate)) {
-    throw createError(400, 'Invalid date format', { from, to }, 'Используйте ISO-формат YYYY-MM-DD');
-  }
+  const fromDate = parseIsoDate(from);
+  const toDate = parseIsoDate(to);
   const rows = readTable(CONFIG.SHEETS.WEEK_PLAN);
-  const result = rows.filter(r => {
-    const date = new Date(r['Дата']);
+  const items = rows.filter(row => {
+    const date = row['Дата'] instanceof Date ? row['Дата'] : parseIsoDate(row['Дата']);
     return date >= fromDate && date <= toDate;
   });
-  return respond(200, { from, to, items: result });
+  return respond(200, { from, to, items });
 }
 
 function handlePostLog(body) {
   const required = ['Дата', 'Упражнение', 'Уровень', 'Сеты', 'Итог'];
   required.forEach(field => {
     if (!body[field]) {
-      throw createError(400, 'Missing field', field, `Заполните ${field}`);
+      throw createError(400, 'Missing field', field, `Заполните поле ${field}.`);
     }
   });
-  body['Уровень'] = sanitizeLevel(body['Уровень']);
+
+  const workoutDate = parseIsoDate(body['Дата']);
+  const exercise = body['Упражнение'];
+  const level = sanitizeLevel(body['Уровень']);
+  const outcome = body['Итог'];
+  const rpe = body['RPE'];
+
   const levelMap = getLevelMap();
-  const key = `${body['Упражнение']}|${body['Уровень']}`;
+  const key = `${exercise}|${level}`;
   const levelInfo = levelMap[key];
   if (!levelInfo) {
-    throw createError(404, 'Level not found', key, 'Добавьте уровень в Справочник');
+    throw createError(404, 'Level not found', key, 'Добавьте уровень в Справочник_Уровней.');
   }
-  body['Название уровня'] = levelInfo['Название уровня'];
-  body['Подходы_план'] = levelInfo['Подходы_план'];
-  body['Повторы_план'] = levelInfo['Повторы_план'];
-  const sets = String(body['Сеты']).split(',').map(s => Number(s.trim()) || 0);
-  body['Объём_факт'] = sets.reduce((acc, cur) => acc + cur, 0);
 
-  const sheet = getSheet(CONFIG.SHEETS.LOG);
-  appendRow(CONFIG.SHEETS.LOG, body);
+  const sets = String(body['Сеты']).split(',').map(part => Number(part.trim()) || 0);
+  const totalVolume = sets.reduce((sum, current) => sum + current, 0);
+
+  const history = readTable(CONFIG.SHEETS.LOG)
+    .filter(row => row['Упражнение'] === exercise && sanitizeLevel(row['Уровень']) === level)
+    .sort((a, b) => new Date(a['Дата']).getTime() - new Date(b['Дата']).getTime());
+
+  const decision = inferDecision(history, {
+    'Итог': outcome,
+    'RPE': rpe
+  });
+
+  const logRow = Object.assign({}, body, {
+    'Дата': workoutDate,
+    'Уровень': level,
+    'Название уровня': levelInfo['Название уровня'],
+    'Подходы_план': levelInfo['Подходы_план'],
+    'Повторы_план': levelInfo['Повторы_план'],
+    'Объём_факт': totalVolume,
+    'Решение_прогрессии': decision
+  });
+
+  appendRow(CONFIG.SHEETS.LOG, logRow);
 
   if (body['ID_Плана']) {
     updatePlanStatusById(body['ID_Плана'], 'выполнено');
   }
 
-  // Прогрессия
-  const logHistory = readTable(CONFIG.SHEETS.LOG).filter(r => r['Упражнение'] === body['Упражнение'] && r['Уровень'] === body['Уровень']);
-  const decision = inferDecision(logHistory.slice(0, -1), body);
-  body['Решение_прогрессии'] = decision;
+  updateProfileFromLog(Object.assign({}, logRow, {
+    'Дата': Utilities.formatDate(workoutDate, Session.getScriptTimeZone(), 'yyyy-MM-dd')
+  }));
 
-  updateProfileFromLog(body);
-  return respond(201, { status: 'ok', decision, volume: body['Объём_факт'] });
+  return respond(201, { status: 'ok', decision, volume: totalVolume });
 }
 
 function handlePostTest(body) {
   const required = ['Дата', 'Упражнение', 'Пытался_уровень', 'Результат'];
   required.forEach(field => {
     if (!body[field]) {
-      throw createError(400, 'Missing field', field, `Заполните ${field}`);
+      throw createError(400, 'Missing field', field, `Заполните поле ${field}.`);
     }
   });
-  body['Пытался_уровень'] = sanitizeLevel(body['Пытался_уровень']);
-  if (body['Следующий_уровень_рекоменд']) {
-    body['Следующий_уровень_рекоменд'] = sanitizeLevel(body['Следующий_уровень_рекоменд']);
-  }
-  appendRow(CONFIG.SHEETS.TESTS, body);
+  const testRow = Object.assign({}, body, {
+    'Дата': parseIsoDate(body['Дата']),
+    'Пытался_уровень': sanitizeLevel(body['Пытался_уровень']),
+    'Следующий_уровень_рекоменд': body['Следующий_уровень_рекоменд'] ? sanitizeLevel(body['Следующий_уровень_рекоменд']) : ''
+  });
+  appendRow(CONFIG.SHEETS.TESTS, testRow);
   return respond(201, { status: 'ok' });
 }
 
@@ -744,40 +817,53 @@ function handlePostAdvance(body) {
   const required = ['Упражнение', 'Текущий_уровень', 'Решение'];
   required.forEach(field => {
     if (!body[field]) {
-      throw createError(400, 'Missing field', field, `Заполните ${field}`);
+      throw createError(400, 'Missing field', field, `Заполните поле ${field}.`);
     }
   });
+
   const exercise = body['Упражнение'];
   const level = sanitizeLevel(body['Текущий_уровень']);
   const decision = body['Решение'];
+  if (!CONFIG.PROGRESSION_DECISIONS.includes(decision)) {
+    throw createError(400, 'Invalid decision value', decision, 'Используйте держать/вверх/делоад.');
+  }
+
   const sheet = getSheet(CONFIG.SHEETS.PROFILE);
-  const range = sheet.getDataRange();
-  const values = range.getValues();
-  const headers = values[0];
-  const idxExercise = headers.indexOf('Упражнение');
-  const idxLevel = headers.indexOf('Текущий_уровень');
-  const idxRec = headers.indexOf('Рекомендация');
+  const headers = getHeaders(sheet);
+  const exerciseCol = headers.indexOf('Упражнение');
+  const levelCol = headers.indexOf('Текущий_уровень');
+  const recCol = headers.indexOf('Рекомендация');
   let updated = false;
-  for (let i = 1; i < values.length; i++) {
-    if (values[i][idxExercise] === exercise) {
-      let newLevel = level;
-      if (decision === 'вверх') newLevel = nextSublevel(level);
-      if (decision === 'делоад') newLevel = previousSublevel(level);
-      sheet.getRange(i + 1, idxLevel + 1).setValue(newLevel);
-      sheet.getRange(i + 1, idxRec + 1).setValue('держать');
-      updated = true;
-      break;
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    const values = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+    for (let i = 0; i < values.length; i++) {
+      if (values[i][exerciseCol] === exercise) {
+        let newLevel = level;
+        if (decision === 'вверх') {
+          newLevel = nextSublevel(level);
+        } else if (decision === 'делоад') {
+          newLevel = previousSublevel(level);
+        }
+        sheet.getRange(i + 2, levelCol + 1).setValue(newLevel);
+        sheet.getRange(i + 2, recCol + 1).setValue('держать');
+        updated = true;
+        break;
+      }
     }
   }
+
   if (!updated) {
     appendRow(CONFIG.SHEETS.PROFILE, {
       'Упражнение': exercise,
-      'Текущий_уровень': decision === 'вверх' ? nextSublevel(level) : decision === 'делоад' ? previousSublevel(level) : level,
+      'Текущий_уровень': decision === 'вверх' ? nextSublevel(level) : (decision === 'делоад' ? previousSublevel(level) : level),
       'Дата_последней_сессии': new Date(),
       'Срывов_подряд': 0,
       'Рекомендация': 'держать'
     });
   }
+
   return respond(200, { status: 'ok' });
 }
 
@@ -785,41 +871,44 @@ function handlePostGenerateWeek(body) {
   const required = ['from', 'to'];
   required.forEach(field => {
     if (!body[field]) {
-      throw createError(400, 'Missing field', field, `Укажите ${field}`);
+      throw createError(400, 'Missing field', field, `Укажите ${field}.`);
     }
   });
-  const fromDate = new Date(body.from);
-  const toDate = new Date(body.to);
-  if (isNaN(fromDate) || isNaN(toDate)) {
-    throw createError(400, 'Invalid date format', body, 'Используйте YYYY-MM-DD');
+
+  const fromDate = parseIsoDate(body.from);
+  const toDate = parseIsoDate(body.to);
+  if (fromDate > toDate) {
+    throw createError(400, 'Invalid date range', body, 'Дата from должна быть раньше to.');
   }
-  const template = readTable(CONFIG.SHEETS.WEEK_TEMPLATE);
+
+  const templateRows = readTable(CONFIG.SHEETS.WEEK_TEMPLATE);
   const planSheet = getSheet(CONFIG.SHEETS.WEEK_PLAN);
-  const existing = readTable(CONFIG.SHEETS.WEEK_PLAN);
+  const existingPlans = readTable(CONFIG.SHEETS.WEEK_PLAN);
   const levelMap = getLevelMap();
 
-  const entries = [];
-  let current = new Date(fromDate);
-  while (current <= toDate) {
-    const weekday = current.getDay(); // 0=Sunday
-    const dayNameRu = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'][weekday];
-    const templateRows = template.filter(r => r['День'] === dayNameRu);
-    templateRows.forEach((row, idx) => {
+  const inserts = [];
+  for (let cursor = new Date(fromDate); cursor <= toDate; cursor.setDate(cursor.getDate() + 1)) {
+    const weekdayShort = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'][cursor.getDay()];
+    const matches = templateRows.filter(row => normalizeDayName(row['День']) === weekdayShort);
+    matches.forEach(row => {
       [1, 2].forEach(slot => {
         const exercise = row[`Упр${slot}`];
-        const level = sanitizeLevel(String(row[`Уровень${slot}`] || ''));
-        if (!exercise || !level) return;
-        const key = `${exercise}|${level}`;
-        const info = levelMap[key];
+        const levelRaw = row[`Уровень${slot}`];
+        if (!exercise || !levelRaw) {
+          return;
+        }
+        const level = sanitizeLevel(levelRaw);
+        const levelKey = `${exercise}|${level}`;
+        const info = levelMap[levelKey];
         if (!info) {
-          throw createError(400, 'Level missing in template', key, 'Добавьте уровень в справочник');
+          throw createError(400, 'Level missing in template', levelKey, 'Добавьте уровень в Справочник_Уровней.');
         }
-        const id = getPlanId(current, exercise, slot);
-        if (existing.some(r => r['ID_Плана'] === id)) {
-          return; // избегаем дублей
+        const id = getPlanId(cursor, exercise, slot);
+        if (existingPlans.some(plan => plan['ID_Плана'] === id) || inserts.some(insert => insert[8] === id)) {
+          return;
         }
-        entries.push([
-          new Date(current),
+        inserts.push([
+          new Date(cursor),
           '',
           exercise,
           level,
@@ -831,17 +920,16 @@ function handlePostGenerateWeek(body) {
         ]);
       });
     });
-    current = new Date(current.getTime() + 86400000);
   }
 
-  if (!entries.length) {
-    return respond(200, { status: 'ok', message: 'Новых записей нет' });
+  if (!inserts.length) {
+    return respond(200, { status: 'ok', inserted: 0, message: 'Новых записей нет.' });
   }
 
-  const startRow = planSheet.getLastRow() + 1;
-  planSheet.getRange(startRow, 1, entries.length, entries[0].length).setValues(entries);
-  return respond(201, { status: 'ok', inserted: entries.length });
+  planSheet.getRange(planSheet.getLastRow() + 1, 1, inserts.length, inserts[0].length).setValues(inserts);
+  return respond(201, { status: 'ok', inserted: inserts.length });
 }
+
 ```
 
 ## 4) Примеры API-запросов и ответов
@@ -925,128 +1013,213 @@ fetch(`${WEBAPP_URL}?path=plan&from=2024-01-01&to=2024-01-07`, {
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <title>Convict Conditioning Planner</title>
+  <title>Convict Conditioning Demo</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 2rem; }
-    section { margin-bottom: 2rem; }
+    body { font-family: "Segoe UI", Arial, sans-serif; margin: 2rem; background: #f7f7f9; }
+    h1 { margin-top: 0; }
+    section { background: #fff; padding: 1.5rem; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 1.5rem; }
+    button { cursor: pointer; padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid #0077cc; background: #0d84ff; color: #fff; }
+    button:disabled { opacity: 0.6; cursor: wait; }
     table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
-    th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
-    label { display: block; margin-top: 0.5rem; }
+    th, td { border: 1px solid #d4d4dd; padding: 0.5rem; text-align: left; }
+    th { background: #f0f4ff; }
+    label { display: block; margin-top: 0.75rem; }
+    input, select, textarea { width: 100%; padding: 0.4rem; border: 1px solid #ccc; border-radius: 4px; }
+    textarea { resize: vertical; min-height: 70px; }
+    .status { font-size: 0.9rem; margin-top: 0.5rem; color: #555; }
+    .log { font-family: "Fira Mono", monospace; font-size: 0.85rem; background: #f3f3f7; padding: 0.75rem; border-radius: 8px; max-height: 200px; overflow-y: auto; }
   </style>
 </head>
 <body>
-  <h1>Convict Conditioning Demo</h1>
+  <h1>Convict Conditioning API Demo</h1>
+  <p>Заполните конфигурацию <code>WEBAPP_URL</code> и <code>API_KEY</code> перед использованием.</p>
+
   <section>
     <h2>План на сегодня</h2>
     <button id="refresh-plan">Обновить</button>
-    <table id="plan-table">
-      <thead><tr><th>Упражнение</th><th>Уровень</th><th>Сеты×Повторы</th><th>Status</th></tr></thead>
-      <tbody></tbody>
+    <div class="status" id="plan-status"></div>
+    <table>
+      <thead>
+        <tr><th>Упражнение</th><th>Уровень</th><th>Название уровня</th><th>Сеты×Повторы</th><th>Статус</th></tr>
+      </thead>
+      <tbody id="plan-body"></tbody>
     </table>
   </section>
 
   <section>
-    <h2>Лог тренировки</h2>
+    <h2>Добавить тренировку</h2>
     <form id="log-form">
-      <label>Дата: <input type="date" name="Дата" required /></label>
-      <label>Упражнение: <select name="Упражнение" required>
-        <option value="Подтягивания">Подтягивания</option>
-        <option value="Приседания">Приседания</option>
-        <option value="Отжимания">Отжимания</option>
-        <option value="Подъёмы ног">Подъёмы ног</option>
-        <option value="Мостик">Мостик</option>
-        <option value="Отжимания в стойке на руках">Отжимания в стойке на руках</option>
-      </select></label>
-      <label>Уровень: <input type="text" name="Уровень" placeholder="2.1" required /></label>
-      <label>Сеты (через запятую): <input type="text" name="Сеты" placeholder="15,14" required /></label>
-      <label>RPE: <input type="number" name="RPE" min="1" max="10" /></label>
-      <label>Итог:
+      <label>Дата
+        <input type="date" name="Дата" required />
+      </label>
+      <label>Упражнение
+        <select name="Упражнение" required>
+          <option value="Подтягивания">Подтягивания</option>
+          <option value="Приседания">Приседания</option>
+          <option value="Отжимания">Отжимания</option>
+          <option value="Подъёмы ног">Подъёмы ног</option>
+          <option value="Мостик">Мостик</option>
+          <option value="Отжимания в стойке на руках">Отжимания в стойке на руках</option>
+        </select>
+      </label>
+      <label>ID плана (если есть)
+        <input type="text" name="ID_Плана" placeholder="20240101-Pod1" />
+      </label>
+      <label>Уровень
+        <input type="text" name="Уровень" placeholder="2.1" required />
+      </label>
+      <label>Сеты (через запятую)
+        <input type="text" name="Сеты" placeholder="10,10,8" required />
+      </label>
+      <label>RPE
+        <input type="number" name="RPE" min="1" max="10" />
+      </label>
+      <label>Итог
         <select name="Итог" required>
           <option value="выполнено">выполнено</option>
           <option value="перевыполнено">перевыполнено</option>
           <option value="не выполнено">не выполнено</option>
         </select>
       </label>
-      <button type="submit">Отправить</button>
+      <label>Примечание
+        <textarea name="Примечание" placeholder="Комментарии"></textarea>
+      </label>
+      <button type="submit">Отправить лог</button>
     </form>
-    <pre id="log-result"></pre>
+    <div class="status" id="log-status"></div>
   </section>
 
   <section>
-    <h2>Список уровней по упражнению</h2>
-    <select id="levels-exercise">
-      <option value="Подтягивания">Подтягивания</option>
-      <option value="Приседания">Приседания</option>
-      <option value="Отжимания">Отжимания</option>
-      <option value="Подъёмы ног">Подъёмы ног</option>
-      <option value="Мостик">Мостик</option>
-      <option value="Отжимания в стойке на руках">Отжимания в стойке на руках</option>
-    </select>
-    <button id="load-levels">Показать</button>
-    <pre id="levels-output"></pre>
+    <h2>Уровни упражнения</h2>
+    <label>Выберите упражнение
+      <select id="levels-select">
+        <option value="Подтягивания">Подтягивания</option>
+        <option value="Приседания">Приседания</option>
+        <option value="Отжимания">Отжимания</option>
+        <option value="Подъёмы ног">Подъёмы ног</option>
+        <option value="Мостик">Мостик</option>
+        <option value="Отжимания в стойке на руках">Отжимания в стойке на руках</option>
+      </select>
+    </label>
+    <button id="load-levels">Показать уровни</button>
+    <div class="status" id="levels-status"></div>
+    <div class="log" id="levels-log"></div>
   </section>
 
   <script>
-    const WEBAPP_URL = 'PASTE_WEBAPP_URL_HERE';
-    const API_KEY = 'PASTE_API_KEY_HERE';
+    const WEBAPP_URL = 'https://script.google.com/macros/s/DEPLOYMENT_ID/exec';
+    const API_KEY = 'YOUR_API_KEY';
 
-    function apiGet(path) {
-      return fetch(`${WEBAPP_URL}?${path}`, {
-        headers: { 'X-API-Key': API_KEY }
-      }).then(r => r.json());
+    function isoToday() {
+      const date = new Date();
+      const tzOffset = date.getTimezoneOffset();
+      const local = new Date(date.getTime() - tzOffset * 60000);
+      return local.toISOString().slice(0, 10);
     }
 
-    function apiPost(path, payload) {
-      return fetch(`${WEBAPP_URL}?path=${path}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': API_KEY
-        },
-        body: JSON.stringify(payload)
-      }).then(r => r.json());
-    }
-
-    document.getElementById('refresh-plan').addEventListener('click', () => {
-      const today = new Date().toISOString().slice(0, 10);
-      apiGet(`path=plan&from=${today}&to=${today}`).then(data => {
-        const tbody = document.querySelector('#plan-table tbody');
-        tbody.innerHTML = '';
-        (data.items || []).forEach(item => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `<td>${item['Упражнение']}</td>`+
-            `<td>${item['Уровень']}</td>`+
-            `<td>${item['Подходы_план']}×${item['Повторы_план']}</td>`+
-            `<td>${item['Статус']}</td>`;
-          tbody.appendChild(tr);
+    async function apiRequest(path, params = {}, method = 'GET') {
+      const url = new URL(WEBAPP_URL);
+      url.searchParams.set('path', path);
+      if (method === 'GET') {
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== '') {
+            url.searchParams.set(key, value);
+          }
         });
-      });
-    });
+      }
+      const options = {
+        method,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      };
+      if (API_KEY) {
+        options.headers['X-API-Key'] = API_KEY;
+      }
+      if (method !== 'GET') {
+        options.body = JSON.stringify(params);
+      }
+      const response = await fetch(url.toString(), options);
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || response.statusText);
+      }
+      return response.json();
+    }
 
-    document.getElementById('log-form').addEventListener('submit', e => {
-      e.preventDefault();
-      const form = e.target;
-      const payload = Object.fromEntries(new FormData(form).entries());
-      apiPost('log', payload).then(data => {
-        document.getElementById('log-result').textContent = JSON.stringify(data, null, 2);
+    async function loadPlan() {
+      const today = isoToday();
+      const status = document.getElementById('plan-status');
+      const body = document.getElementById('plan-body');
+      status.textContent = 'Загружаем…';
+      body.innerHTML = '';
+      try {
+        const data = await apiRequest('plan', { from: today, to: today });
+        if (!data.items || !data.items.length) {
+          status.textContent = 'На сегодня план не найден.';
+          return;
+        }
+        data.items.forEach(item => {
+          const tr = document.createElement('tr');
+          const setsXreps = `${item['Подходы_план']}×${item['Повторы_план']}`;
+          tr.innerHTML = `<td>${item['Упражнение']}</td>` +
+                         `<td>${item['Уровень']}</td>` +
+                         `<td>${item['Название уровня'] || ''}</td>` +
+                         `<td>${setsXreps}</td>` +
+                         `<td>${item['Статус'] || ''}</td>`;
+          body.appendChild(tr);
+        });
+        status.textContent = `Найдено записей: ${data.items.length}`;
+      } catch (err) {
+        status.textContent = `Ошибка: ${err.message}`;
+      }
+    }
+
+    async function submitLog(event) {
+      event.preventDefault();
+      const form = event.target;
+      const formData = new FormData(form);
+      const payload = Object.fromEntries(formData.entries());
+      const status = document.getElementById('log-status');
+      status.textContent = 'Отправляем…';
+      try {
+        const result = await apiRequest('log', payload, 'POST');
+        status.textContent = `Успешно. Решение: ${result.decision}, объём: ${result.volume}`;
         form.reset();
-      }).catch(err => {
-        document.getElementById('log-result').textContent = err;
-      });
-    });
+        form.querySelector('[name="Дата"]').value = isoToday();
+        await loadPlan();
+      } catch (err) {
+        status.textContent = `Ошибка: ${err.message}`;
+      }
+    }
 
-    document.getElementById('load-levels').addEventListener('click', () => {
-      const exercise = document.getElementById('levels-exercise').value;
-      apiGet(`path=levels&exercise=${encodeURIComponent(exercise)}`).then(data => {
-        document.getElementById('levels-output').textContent = JSON.stringify(data.levels, null, 2);
-      });
-    });
+    async function loadLevels() {
+      const select = document.getElementById('levels-select');
+      const status = document.getElementById('levels-status');
+      const log = document.getElementById('levels-log');
+      status.textContent = 'Загружаем…';
+      log.textContent = '';
+      try {
+        const data = await apiRequest('levels', { exercise: select.value });
+        log.textContent = data.levels
+          .map(level => `${level.level} — ${level.name} (${level.sets}×${level.reps})`)
+          .join('\n');
+        status.textContent = `Всего уровней: ${data.levels.length}`;
+      } catch (err) {
+        status.textContent = `Ошибка: ${err.message}`;
+      }
+    }
 
-    // Автозагрузка
-    document.getElementById('refresh-plan').click();
+    document.getElementById('refresh-plan').addEventListener('click', loadPlan);
+    document.getElementById('log-form').addEventListener('submit', submitLog);
+    document.getElementById('load-levels').addEventListener('click', loadLevels);
+
+    document.getElementById('log-form').querySelector('[name="Дата"]').value = isoToday();
+    loadPlan();
   </script>
 </body>
 </html>
+
 ```
 
 ## 6) Пошаговый деплой и настройка
