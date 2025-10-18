@@ -1,0 +1,8 @@
+[functions]
+verify_jwt = false
+
+[functions."recalculate-plan"]
+verify_jwt = false
+
+[project]
+api_extra_search_path = ["public"]
