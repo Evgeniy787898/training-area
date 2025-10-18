@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ValidationReport",
+  "type": "object",
+  "required": ["status", "checks"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["pass", "warn", "fail"]
+    },
+    "overall_recommendation": {
+      "type": "string"
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "result"],
+        "properties": {
+          "name": {"type": "string"},
+          "result": {"type": "string", "enum": ["pass", "warn", "fail"]},
+          "details": {"type": "string"},
+          "thresholds": {
+            "type": "object",
+            "additionalProperties": {"type": "number"}
+          },
+          "metrics": {
+            "type": "object",
+            "additionalProperties": {"type": ["number", "string"]}
+          },
+          "recommended_actions": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
