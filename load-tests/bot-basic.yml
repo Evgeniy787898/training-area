@@ -1,0 +1,34 @@
+config:
+  target: "https://example.com/support-bot"
+  phases:
+    - duration: 60
+      arrivalRate: 10
+      name: warm-up
+    - duration: 120
+      arrivalRate: 25
+      rampTo: 60
+      name: stress-test
+  plugins:
+    ensure: {}
+scenarios:
+  - name: basic-conversation
+    flow:
+      - post:
+          url: "/messages"
+          json:
+            userId: "user-{{ $randomNumber(1, 1000) }}"
+            channel: "web"
+            content: "Hello, I need some help"
+          capture:
+            - json: $.reply
+              as: reply
+      - think: 2
+      - post:
+          url: "/messages"
+          json:
+            userId: "user-{{ $randomNumber(1, 1000) }}"
+            channel: "web"
+            content: "I have a billing issue"
+          capture:
+            - json: $.reply
+              as: followup
