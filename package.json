@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "test": "node --test",
     "test:unit": "node --test \"tests/unit/**/*.test.js\"",
@@ -12,6 +15,13 @@
     "security": "node scripts/security-check.js",
     "privacy-check": "node scripts/privacy-check.js",
     "qa:ci": "npm run lint && npm run test && npm run security && npm run privacy-check",
-    "test:load": "node scripts/load-test.js"
+    "test:load": "node scripts/load-test.js",
+    "bot": "node src/bot/telegramBot.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.44.3",
+    "grammy": "^1.26.1",
+    "openai": "^4.52.1",
+    "zod": "^3.23.8"
   }
 }

@@ -1,10 +1,43 @@
 import http from 'node:http';
-import { BotEngine, MetricsTracker, ErrorTracker, loadEnv, HealthService } from '../src/index.js';
+import {
+  BotEngine,
+  MetricsTracker,
+  ErrorTracker,
+  loadEnv,
+  HealthService,
+  createSupabaseClient,
+  createOpenAiClient,
+  TrainingCoach,
+  ProgressRepository
+} from '../src/index.js';
 
 const config = loadEnv(process.env);
 const metrics = new MetricsTracker({ prefix: 'server_bot' });
 const errorTracker = new ErrorTracker({ dsn: process.env.ERROR_TRACKING_DSN ?? null });
-const bot = new BotEngine({ metrics, errorTracker, config });
+let trainingCoach = null;
+
+if (config.SUPABASE_URL && config.SUPABASE_ANON_KEY && config.OPENAI_API_KEY) {
+  try {
+    const supabase = createSupabaseClient({
+      url: config.SUPABASE_URL,
+      anonKey: config.SUPABASE_ANON_KEY
+    });
+    const openAi = createOpenAiClient({
+      apiKey: config.OPENAI_API_KEY,
+      organization: config.OPENAI_ORGANIZATION ?? undefined,
+      project: config.OPENAI_PROJECT ?? undefined
+    });
+    trainingCoach = new TrainingCoach({ openAi, progressRepository: new ProgressRepository(supabase) });
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn('Не удалось инициализировать тренировочного коуча', error);
+  }
+} else {
+  // eslint-disable-next-line no-console
+  console.warn('Параметры Supabase или OpenAI не заданы — BotEngine будет отвечать заглушками.');
+}
+
+const bot = new BotEngine({ metrics, errorTracker, config, trainingCoach });
 const healthService = new HealthService({
   metrics,
   indicators: [

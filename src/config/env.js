@@ -26,12 +26,24 @@ export const loadEnv = (env = process.env) => {
     LOG_LEVEL: logLevel,
     SUPABASE_URL: env.SUPABASE_URL ?? null,
     SUPABASE_ANON_KEY: env.SUPABASE_ANON_KEY ?? null,
+    TELEGRAM_BOT_TOKEN: env.TELEGRAM_BOT_TOKEN ?? null,
+    OPENAI_API_KEY: env.OPENAI_API_KEY ?? null,
+    OPENAI_ORGANIZATION: env.OPENAI_ORGANIZATION ?? null,
+    OPENAI_PROJECT: env.OPENAI_PROJECT ?? null,
     ERROR_TRACKING_DSN: env.ERROR_TRACKING_DSN ?? null,
     isProduction: nodeEnv === 'production'
   };
 
   if (config.SUPABASE_URL && !isValidUrl(config.SUPABASE_URL)) {
     throw new Error('SUPABASE_URL must be a valid URL');
+  }
+
+  if (config.TELEGRAM_BOT_TOKEN && config.TELEGRAM_BOT_TOKEN.length < 30) {
+    throw new Error('TELEGRAM_BOT_TOKEN выглядит некорректно');
+  }
+
+  if (config.OPENAI_API_KEY && !config.OPENAI_API_KEY.startsWith('sk-')) {
+    throw new Error('OPENAI_API_KEY должен начинаться с «sk-»');
   }
 
   return config;
