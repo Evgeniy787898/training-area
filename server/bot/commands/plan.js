@@ -78,16 +78,20 @@ export async function planCommand(ctx) {
  * Показать подробный план на сегодня
  */
 export async function planTodayCallback(ctx) {
-    await ctx.answerCbQuery();
+    if (ctx.updateType === 'callback_query') {
+        await ctx.answerCbQuery();
+    }
 
     const profileId = ctx.state.profileId;
     const profile = ctx.state.profile;
     const today = format(new Date(), 'yyyy-MM-dd');
 
-    try {
-        await ctx.deleteMessage();
-    } catch (error) {
-        // Сообщение уже могло быть удалено
+    if (ctx.updateType === 'callback_query') {
+        try {
+            await ctx.deleteMessage();
+        } catch (error) {
+            // Сообщение уже могло быть удалено
+        }
     }
 
     try {

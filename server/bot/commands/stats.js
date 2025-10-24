@@ -163,25 +163,33 @@ function formatStatsMessage(stats) {
 export async function statsDetailedCallback(ctx) {
     await ctx.answerCbQuery();
 
+    const profileId = ctx.state.profileId;
+
     try {
         await ctx.deleteMessage();
     } catch (error) {
-        // Сообщение уже могло быть удалено
+        // ignore
     }
 
-    await beginChatResponse(ctx);
+    try {
+        const endDate = new Date();
+        const startDate = subDays(endDate, 28);
 
-    await replyWithTracking(ctx,
-        '📈 **Подробная аналитика**\n\n' +
-        'Эта функция будет доступна в WebApp.\n\n' +
-        'Там ты увидишь:\n' +
-        '• Графики прогресса по упражнениям\n' +
-        '• Динамику объёма тренировок\n' +
-        '• Тренды RPE\n' +
-        '• История достижений\n\n' +
-        '🚧 Раздел в разработке',
-        { parse_mode: 'Markdown' }
-    );
+        const [volumeTrend, rpeDistribution, adherence] = await Promise.all([
+            db.getVolumeTrend(profileId, startDate),
+            db.getRpeDistribution(profileId, startDate),
+            db.getAdherenceSummary(profileId),
+        ]);
+
+        const message = formatDetailedAnalytics(volumeTrend, rpeDistribution, adherence);
+
+        await beginChatResponse(ctx);
+        await replyWithTracking(ctx, message, { parse_mode: 'Markdown' });
+    } catch (error) {
+        console.error('Failed to load detailed stats:', error);
+        await beginChatResponse(ctx);
+        await replyWithTracking(ctx, '😔 Не удалось собрать подробную аналитику. Попробуй позже.');
+    }
 }
 
 /**
@@ -201,8 +209,7 @@ export async function statsAchievementsCallback(ctx) {
 
         await beginChatResponse(ctx);
 
-        // Получаем достижения из БД (будет реализовано позже)
-        const achievements = []; // await getAchievements(profileId);
+        const achievements = await db.getAchievements(profileId, { limit: 10 });
 
         if (achievements.length === 0) {
             await replyWithTracking(ctx,
@@ -219,8 +226,17 @@ export async function statsAchievementsCallback(ctx) {
         } else {
             let message = '🏆 **Твои достижения**\n\n';
             achievements.forEach(ach => {
-                message += `${ach.emoji} ${ach.title}\n`;
-                message += `   ${ach.description}\n\n`;
+                const date = ach.awarded_at
+                    ? format(new Date(ach.awarded_at), 'd MMMM', { locale: ru })
+                    : null;
+                message += `${ach.emoji || '✅'} ${ach.title}\n`;
+                if (ach.description) {
+                    message += `   ${ach.description}\n`;
+                }
+                if (date) {
+                    message += `   Получено: ${date}\n`;
+                }
+                message += '\n';
             });
             await replyWithTracking(ctx, message, { parse_mode: 'Markdown' });
         }
@@ -251,6 +267,29 @@ function buildPrimerMessage() {
     }
 
     message += 'Отправь первый отчёт — и я покажу регулярность, RPE и серию тренировок.';
+    return message;
+}
+
+function formatDetailedAnalytics(volumeTrend, rpeDistribution, adherence) {
+    const chartPoints = volumeTrend.chart.slice(-5).map(point => {
+        const dateLabel = format(new Date(point.date), 'd MMM', { locale: ru });
+        return `• ${dateLabel}: объём ${point.volume}`;
+    }).join('\n');
+
+    const heavyShare = rpeDistribution.summary.heavy_share;
+    const lightShare = rpeDistribution.summary.light_share;
+
+    const message =
+        '📈 **Подробная аналитика**\n\n' +
+        'Объём за последние 4 недели:\n' +
+        (chartPoints || '— данных пока недостаточно') + '\n\n' +
+        `Средний объём за тренировку: ${volumeTrend.summary.average_volume}\n` +
+        `Всего тренировок за период: ${volumeTrend.summary.period_sessions}\n\n` +
+        'RPE по ощущениям:\n' +
+        rpeDistribution.chart.map(bucket => `• ${bucket.label}: ${bucket.value}`).join('\n') + '\n\n' +
+        `Тяжёлые сессии: ${heavyShare}% • Лёгкие: ${lightShare}%\n\n` +
+        `Регулярность за месяц: ${adherence.adherence_percent}% (из ${adherence.total_sessions} тренировок)`;
+
     return message;
 }
 
