@@ -1,5 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
+import { addDays, format, startOfWeek } from 'date-fns';
 import config from '../config/env.js';
+import { buildDefaultWeekPlan } from '../services/staticPlan.js';
+
+const PLAN_CACHE_STATE = 'ui_cached_plan';
 
 // Create Supabase client with service role key for backend operations
 export const supabase = createClient(
@@ -25,6 +29,21 @@ export const db = {
 
         if (error && error.code !== 'PGRST116') {
             console.error('Error fetching profile:', error);
+            throw error;
+        }
+
+        return data;
+    },
+
+    async getProfileById(profileId) {
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', profileId)
+            .single();
+
+        if (error && error.code !== 'PGRST116') {
+            console.error('Error fetching profile by id:', error);
             throw error;
         }
 
@@ -144,6 +163,40 @@ export const db = {
         return data;
     },
 
+    async getOrCreateFallbackWeekPlan(profile, profileId, referenceDate) {
+        const weekStart = startOfWeek(referenceDate, { weekStartsOn: 1 });
+        const weekEnd = addDays(weekStart, 6);
+        const weekStartStr = format(weekStart, 'yyyy-MM-dd');
+
+        try {
+            const cached = await this.getDialogState(profileId, PLAN_CACHE_STATE);
+            if (cached?.state_payload?.plan?.metadata?.week_start === weekStartStr) {
+                return cached.state_payload.plan;
+            }
+        } catch (error) {
+            console.error('Failed to load cached week plan:', error);
+        }
+
+        const frequency = profile?.preferences?.training_frequency || 4;
+        const plan = buildDefaultWeekPlan({ startDate: weekStart, frequency });
+
+        try {
+            await this.saveDialogState(
+                profileId,
+                PLAN_CACHE_STATE,
+                {
+                    plan,
+                    generated_at: new Date().toISOString(),
+                },
+                addDays(weekEnd, 1)
+            );
+        } catch (error) {
+            console.error('Failed to cache fallback plan:', error);
+        }
+
+        return plan;
+    },
+
     // Exercise progress operations
     async createExerciseProgress(progressData) {
         const { data, error } = await supabase
@@ -196,6 +249,22 @@ export const db = {
 
         if (error) {
             console.error('Error recording metric:', error);
+            throw error;
+        }
+
+        return data;
+    },
+
+    async getLatestMetrics(profileId) {
+        const { data, error } = await supabase
+            .from('metrics')
+            .select('*')
+            .eq('profile_id', profileId)
+            .order('recorded_at', { ascending: false })
+            .limit(10);
+
+        if (error) {
+            console.error('Error fetching latest metrics:', error);
             throw error;
         }
 
@@ -298,6 +367,159 @@ export const db = {
             console.error('Error clearing dialog state:', error);
             throw error;
         }
+    },
+
+    async getAchievements(profileId, { limit = 5 } = {}) {
+        const { data, error } = await supabase
+            .from('achievements')
+            .select('*')
+            .eq('profile_id', profileId)
+            .order('awarded_at', { ascending: false })
+            .limit(limit);
+
+        if (error) {
+            console.error('Error fetching achievements:', error);
+            throw error;
+        }
+
+        return data;
+    },
+
+    async getAdherenceSummary(profileId) {
+        const { data, error } = await supabase
+            .from('training_sessions')
+            .select('status')
+            .eq('profile_id', profileId)
+            .gte('date', format(addDays(new Date(), -30), 'yyyy-MM-dd'));
+
+        if (error) {
+            console.error('Error calculating adherence:', error);
+            throw error;
+        }
+
+        const total = data.length;
+        const completed = data.filter(item => item.status === 'done').length;
+        const adherence = total === 0 ? 0 : Math.round((completed / total) * 100);
+
+        return {
+            window: '30d',
+            total_sessions: total,
+            completed_sessions: completed,
+            adherence_percent: adherence,
+        };
+    },
+
+    async calculateProgressionDecision(profileId, session) {
+        const history = await this.getTrainingSessions(profileId, {
+            endDate: session.date,
+        });
+
+        const recent = history.slice(0, 6);
+        const completionRates = recent.map(item => (item.status === 'done' ? 1 : 0));
+        const completionRatio = completionRates.length
+            ? completionRates.reduce((acc, value) => acc + value, 0) / completionRates.length
+            : 0;
+
+        let decision = 'hold';
+        let nextSteps = 'Держим текущую прогрессию. Продолжай в том же духе!';
+
+        if (session.rpe && session.rpe <= 5 && completionRatio > 0.8) {
+            decision = 'advance';
+            nextSteps = 'Можно усложнить следующую тренировку: добавим подход или усложним уровень.';
+        } else if (session.rpe && session.rpe >= 9) {
+            decision = 'regress';
+            nextSteps = 'Тренировка далась тяжело. На следующий раз упрощаем вариант или уменьшаем объём.';
+        } else if (completionRatio < 0.5) {
+            decision = 'adjust_focus';
+            nextSteps = 'Часто пропуски — скорректируем расписание и нагрузку, чтобы упростить вход.';
+        }
+
+        return { decision, next_steps: nextSteps };
+    },
+
+    async getVolumeTrend(profileId, startDate) {
+        const { data, error } = await supabase
+            .from('training_sessions')
+            .select('*')
+            .eq('profile_id', profileId)
+            .gte('date', format(startDate, 'yyyy-MM-dd'))
+            .order('date', { ascending: true });
+
+        if (error) {
+            console.error('Error fetching volume trend:', error);
+            throw error;
+        }
+
+        const chart = data.map(session => {
+            const exercises = Array.isArray(session.exercises) ? session.exercises : [];
+            const volume = exercises.reduce((total, exercise) => {
+                const sets = exercise.actual?.sets ?? exercise.target?.sets ?? 0;
+                const reps = exercise.actual?.reps ?? exercise.target?.reps ?? 0;
+                return total + sets * reps;
+            }, 0);
+
+            return {
+                date: session.date,
+                volume,
+                status: session.status,
+            };
+        });
+
+        const totalVolume = chart.reduce((acc, point) => acc + point.volume, 0);
+        const averageVolume = chart.length ? Math.round(totalVolume / chart.length) : 0;
+
+        return {
+            chart,
+            summary: {
+                total_volume: totalVolume,
+                average_volume: averageVolume,
+                period_sessions: chart.length,
+            },
+        };
+    },
+
+    async getRpeDistribution(profileId, startDate) {
+        const { data, error } = await supabase
+            .from('training_sessions')
+            .select('rpe, status, date')
+            .eq('profile_id', profileId)
+            .gte('date', format(startDate, 'yyyy-MM-dd'));
+
+        if (error) {
+            console.error('Error fetching RPE distribution:', error);
+            throw error;
+        }
+
+        const buckets = [
+            { label: 'Лёгкие (1-4)', min: 0, max: 4 },
+            { label: 'Средние (5-7)', min: 4, max: 7 },
+            { label: 'Тяжёлые (8-9)', min: 7, max: 9 },
+            { label: 'Предельные (9-10)', min: 9, max: 11 },
+        ].map(bucket => ({ ...bucket, count: 0 }));
+
+        data.forEach(item => {
+            const rpeValue = typeof item.rpe === 'number' ? item.rpe : Number(item.rpe);
+
+            if (!rpeValue || Number.isNaN(rpeValue)) {
+                return;
+            }
+
+            const bucket = buckets.find(b => rpeValue > b.min && rpeValue <= b.max);
+            if (bucket) {
+                bucket.count += 1;
+            }
+        });
+
+        const total = buckets.reduce((acc, bucket) => acc + bucket.count, 0);
+
+        return {
+            chart: buckets.map(bucket => ({ label: bucket.label, value: bucket.count })),
+            summary: {
+                total_sessions: total,
+                heavy_share: total ? Math.round((buckets[2].count / total) * 100) : 0,
+                light_share: total ? Math.round((buckets[0].count / total) * 100) : 0,
+            },
+        };
     },
 };
 
