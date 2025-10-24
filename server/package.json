@@ -1,0 +1,36 @@
+{
+    "name": "training-bot-server",
+    "version": "1.0.0",
+    "description": "Personal training assistant Telegram bot",
+    "main": "bot/index.js",
+    "type": "module",
+    "scripts": {
+        "start": "node bot/index.js",
+        "dev": "node --watch bot/index.js",
+        "lint": "eslint .",
+        "test": "node --test"
+    },
+    "keywords": [
+        "telegram",
+        "bot",
+        "training",
+        "ai",
+        "fitness"
+    ],
+    "author": "",
+    "license": "MIT",
+    "dependencies": {
+        "telegraf": "^4.15.0",
+        "@supabase/supabase-js": "^2.39.0",
+        "openai": "^4.20.0",
+        "axios": "^1.6.0",
+        "dotenv": "^16.3.1",
+        "zod": "^3.22.4",
+        "date-fns": "^2.30.0",
+        "date-fns-tz": "^2.0.0"
+    },
+    "devDependencies": {
+        "eslint": "^8.55.0",
+        "@types/node": "^20.10.0"
+    }
+}
