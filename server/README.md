@@ -25,8 +25,7 @@ server/
 ├── config/                # Конфигурация
 │   └── env.js            # Переменные окружения
 ├── supabase/              # Supabase ресурсы
-│   ├── migrations/       # SQL миграции
-│   │   └── 20240101000000_initial_schema.sql
+│   ├── migrations/       # SQL миграции (инициализация + обновления)
 │   └── functions/        # Edge Functions
 │       ├── update_plan/  # Обновление плана
 │       └── notify_daily/ # Ежедневные уведомления
@@ -37,12 +36,19 @@ server/
 ## Установка
 
 ```bash
+cd server
 npm install
 ```
 
 ## Переменные окружения
 
 Скопируйте `.env.example` в `.env` и заполните:
+
+```bash
+cp .env.example .env
+```
+
+Затем укажите значения переменных:
 
 ```bash
 # Telegram Bot Token (от @BotFather)

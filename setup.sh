@@ -29,7 +29,7 @@ if [ -f ".env" ]; then
 fi
 
 # Копируем конфигурацию
-cp env.config.txt .env
+cp .env.example .env
 echo "✅ Файл .env создан"
 echo ""
 
@@ -46,6 +46,10 @@ cd ..
 echo "📦 Установка зависимостей WebApp..."
 cd webapp
 npm install
+if [ ! -f ".env.local" ]; then
+    cp .env.example .env.local
+    echo "✅ Файл webapp/.env.local создан"
+fi
 echo "✅ Зависимости WebApp установлены"
 echo ""
 
@@ -56,11 +60,9 @@ echo "✅ Установка завершена!"
 echo ""
 echo "📋 Следующие шаги:"
 echo ""
-echo "1. Примените SQL миграцию в Supabase:"
+echo "1. Примените SQL миграции в Supabase:"
 echo "   - Откройте https://supabase.com/dashboard/project/buqjktrypviesnucczjr/sql/new"
-echo "   - Скопируйте содержимое файла:"
-echo "     server/supabase/migrations/20240101000000_initial_schema.sql"
-echo "   - Выполните SQL запрос"
+echo "   - Последовательно выполните файлы из каталога server/supabase/migrations/"
 echo ""
 echo "2. Получите anon_key от Supabase:"
 echo "   - Откройте https://supabase.com/dashboard/project/buqjktrypviesnucczjr/settings/api"

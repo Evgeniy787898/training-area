@@ -53,8 +53,8 @@ training-area/
    ```
 
 2. **Настройте переменные окружения**
-   
-   Создайте файл `server/.env` (используйте `.env.example` как шаблон):
+
+   Создайте файл `server/.env` (используйте `server/.env.example` как шаблон):
    ```bash
    # Telegram
    TELEGRAM_BOT_TOKEN=your_bot_token_here
@@ -74,12 +74,11 @@ training-area/
    ```
 
 4. **Создайте базу данных**
-   
-   Выполните миграцию в Supabase:
+
+   Выполните миграции в Supabase:
    - Откройте [Supabase Dashboard](https://supabase.com/dashboard)
    - SQL Editor → New Query
-   - Скопируйте содержимое `server/supabase/migrations/20240101000000_initial_schema.sql`
-   - Выполните запрос
+   - Последовательно выполните файлы из `server/supabase/migrations/` (начните с `20240101000000_initial_schema.sql`)
 
 5. **Запустите бота и HTTP API**
    ```bash
@@ -93,11 +92,11 @@ training-area/
 ```bash
 cd webapp
 npm install
-VITE_API_BASE_URL="http://localhost:3000"
+cp .env.example .env.local
 npm run dev
 ```
 
-WebApp будет доступен на `http://localhost:3001`
+По умолчанию dev-сервер Vite поднимается на `http://localhost:5173`. При необходимости можно задать порт вручную: `npm run dev -- --port 3001`.
 
 Для интеграции с Telegram:
 1. Разместите WebApp на хостинге (Vercel, Netlify, и т.д.)
@@ -173,6 +172,7 @@ WebApp будет доступен на `http://localhost:3001`
 - `telegram-webapp-ui-ux-specifikatsiya.md` — UI/UX гайд для WebApp
 - `dialogovaya-logika-i-ux-chata.md` — описание сценариев NLU и состояния диалога
 - `api-schema.md` — Контракты HTTP API
+- `webapp/README.md` — отдельный гайд по WebApp и окружению
 
 ## 🐛 Отладка
 
