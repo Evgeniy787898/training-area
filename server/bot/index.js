@@ -1,5 +1,6 @@
 import { Telegraf } from 'telegraf';
 import config from '../config/env.js';
+import { startHttpServer } from '../api/index.js';
 import {
     authMiddleware,
     loggingMiddleware,
@@ -156,8 +157,15 @@ async function startBot() {
     }
 }
 
-// Start the bot
-startBot();
+async function bootstrap() {
+    await startHttpServer();
+    await startBot();
+}
+
+bootstrap().catch(error => {
+    console.error('Fatal startup error:', error);
+    process.exit(1);
+});
 
 export default bot;
 

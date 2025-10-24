@@ -81,18 +81,19 @@ training-area/
    - Скопируйте содержимое `server/supabase/migrations/20240101000000_initial_schema.sql`
    - Выполните запрос
 
-5. **Запустите бота**
+5. **Запустите бота и HTTP API**
    ```bash
    npm run dev
    ```
 
-Бот готов! Найдите его в Telegram и отправьте `/start`
+Бот и HTTP API (порт `3000`) готовы! Найдите его в Telegram и отправьте `/start`. REST-эндпоинты доступны по адресу `http://localhost:3000/v1/*`.
 
 ## 📱 Запуск WebApp
 
 ```bash
 cd webapp
 npm install
+VITE_API_BASE_URL="http://localhost:3000"
 npm run dev
 ```
 
@@ -171,6 +172,8 @@ const SYSTEM_PROMPT = `...`;
 - `pravila-ii-i-dialoga.md` — Правила поведения AI
 - `logika-progressii-i-ii.md` — Система прогрессий
 - `trenirovochnye-programmy-i-progressii.md` — Тренировочные программы
+- `telegram-webapp-ui-ux-specifikatsiya.md` — UI/UX гайд для WebApp
+- `api-schema.md` — Контракты HTTP API
 
 ## 🐛 Отладка
 
