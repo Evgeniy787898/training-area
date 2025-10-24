@@ -3,6 +3,7 @@ import { db } from '../../infrastructure/supabase.js';
 import { format } from 'date-fns';
 import ru from 'date-fns/locale/ru/index.js';
 import plannerService from '../../services/planner.js';
+import { beginChatResponse, replyWithTracking } from '../utils/chat.js';
 
 /**
  * Команда /report - отчёт о тренировке
@@ -11,13 +12,15 @@ export async function reportCommand(ctx) {
     const profileId = ctx.state.profileId;
 
     try {
+        await beginChatResponse(ctx);
+
         // Получаем последние 3 тренировки для выбора
         const sessions = await db.getTrainingSessions(profileId, {
             status: 'planned',
         });
 
         if (!sessions || sessions.length === 0) {
-            await ctx.reply(
+            await replyWithTracking(ctx,
                 '📋 Нет запланированных тренировок для отчёта.\n\n' +
                 'Сначала создай план командой /plan'
             );
@@ -35,7 +38,7 @@ export async function reportCommand(ctx) {
 
         const keyboard = Markup.inlineKeyboard(buttons);
 
-        await ctx.reply(
+        await replyWithTracking(ctx,
             '📝 **Отчёт о тренировке**\n\n' +
             'Выбери тренировку, о которой хочешь отчитаться:',
             { parse_mode: 'Markdown', ...keyboard }
@@ -43,7 +46,8 @@ export async function reportCommand(ctx) {
 
     } catch (error) {
         console.error('Error in report command:', error);
-        await ctx.reply('😔 Не удалось загрузить список тренировок.');
+        await beginChatResponse(ctx);
+        await replyWithTracking(ctx, '😔 Не удалось загрузить список тренировок.');
     }
 }
 
@@ -76,6 +80,8 @@ export async function reportSessionCallback(ctx) {
 
         await ctx.deleteMessage();
 
+        await beginChatResponse(ctx);
+
         const message =
             `📝 **Отчёт о тренировке**\n\n` +
             `Тренировка: ${format(new Date(session.date), 'd MMMM', { locale: ru })}\n\n` +
@@ -95,11 +101,12 @@ export async function reportSessionCallback(ctx) {
             ],
         ]);
 
-        await ctx.reply(message, { parse_mode: 'Markdown', ...keyboard });
+        await replyWithTracking(ctx, message, { parse_mode: 'Markdown', ...keyboard });
 
     } catch (error) {
         console.error('Error in report session callback:', error);
-        await ctx.reply('😔 Произошла ошибка при создании отчёта.');
+        await beginChatResponse(ctx);
+        await replyWithTracking(ctx, '😔 Произошла ошибка при создании отчёта.');
     }
 }
 
@@ -135,6 +142,8 @@ export async function rpeCallback(ctx) {
 
     await ctx.deleteMessage();
 
+    await beginChatResponse(ctx);
+
     const message =
         `📝 **Отчёт о тренировке**\n\n` +
         `✅ RPE: ${rpe}/10\n\n` +
@@ -147,7 +156,7 @@ export async function rpeCallback(ctx) {
         [Markup.button.callback('❌ Не получилось', 'completion_none')],
     ]);
 
-    await ctx.reply(message, { parse_mode: 'Markdown', ...keyboard });
+    await replyWithTracking(ctx, message, { parse_mode: 'Markdown', ...keyboard });
 }
 
 /**
@@ -181,6 +190,8 @@ export async function completionCallback(ctx) {
 
     await ctx.deleteMessage();
 
+    await beginChatResponse(ctx);
+
     const message =
         `📝 **Отчёт о тренировке**\n\n` +
         `✅ RPE: ${newPayload.rpe}/10\n` +
@@ -193,7 +204,7 @@ export async function completionCallback(ctx) {
         [Markup.button.callback('⏭️ Пропустить', 'notes_skip')],
     ]);
 
-    await ctx.reply(message, { parse_mode: 'Markdown', ...keyboard });
+    await replyWithTracking(ctx, message, { parse_mode: 'Markdown', ...keyboard });
 }
 
 /**
@@ -250,7 +261,10 @@ async function finalizeReport(ctx, notes) {
             feedbackMessage += `\nТвои заметки: ${notes}\n`;
         }
 
-        await ctx.reply(feedbackMessage, { parse_mode: 'Markdown' });
+        await beginChatResponse(ctx);
+
+        const placeholderMessage = `${feedbackMessage}\n\n⏳ Готовлю рекомендации...`;
+        const summaryMessage = await replyWithTracking(ctx, placeholderMessage, { parse_mode: 'Markdown' });
 
         // Получаем AI-анализ (в фоне)
         setTimeout(async () => {
@@ -266,13 +280,45 @@ async function finalizeReport(ctx, notes) {
                 });
 
                 if (analysis.feedback) {
-                    await ctx.reply(
-                        `💭 **Мой анализ:**\n\n${analysis.feedback}`,
-                        { parse_mode: 'Markdown' }
-                    );
+                    const finalText = `${feedbackMessage}\n\n💭 **Мой анализ:**\n\n${analysis.feedback}`;
+                    try {
+                        await ctx.telegram.editMessageText(
+                            ctx.chat.id,
+                            summaryMessage.message_id,
+                            undefined,
+                            finalText,
+                            { parse_mode: 'Markdown' }
+                        );
+                    } catch (editError) {
+                        console.error('Failed to edit summary message:', editError);
+                        await replyWithTracking(ctx, `💭 **Мой анализ:**\n\n${analysis.feedback}`, { parse_mode: 'Markdown' });
+                    }
+                } else {
+                    try {
+                        await ctx.telegram.editMessageText(
+                            ctx.chat.id,
+                            summaryMessage.message_id,
+                            undefined,
+                            feedbackMessage,
+                            { parse_mode: 'Markdown' }
+                        );
+                    } catch (editError) {
+                        console.error('Failed to finalize summary message:', editError);
+                    }
                 }
             } catch (error) {
                 console.error('Error getting AI analysis:', error);
+                try {
+                    await ctx.telegram.editMessageText(
+                        ctx.chat.id,
+                        summaryMessage.message_id,
+                        undefined,
+                        `${feedbackMessage}\n\n⚠️ Не удалось получить рекомендации — повторю анализ позже.`,
+                        { parse_mode: 'Markdown' }
+                    );
+                } catch (editError) {
+                    console.error('Failed to update summary after analysis error:', editError);
+                }
             }
         }, 1000);
 
@@ -294,7 +340,8 @@ async function finalizeReport(ctx, notes) {
 
     } catch (error) {
         console.error('Error finalizing report:', error);
-        await ctx.reply('😔 Не удалось сохранить отчёт. Попробуй позже.');
+        await beginChatResponse(ctx);
+        await replyWithTracking(ctx, '😔 Не удалось сохранить отчёт. Попробуй позже.');
     }
 }
 

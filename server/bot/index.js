@@ -8,7 +8,7 @@ import {
 } from './middleware/auth.js';
 
 // Import commands
-import { startCommand, onboardingStartCallback, goalCallback, equipmentCallback, scheduleCallback, timeCallback } from './commands/start.js';
+import { startCommand } from './commands/start.js';
 import { helpCommand } from './commands/help.js';
 import { planCommand, planTodayCallback } from './commands/plan.js';
 import {
@@ -50,13 +50,6 @@ bot.command('stats', statsCommand);
 bot.command('settings', settingsCommand);
 
 // Register callback queries (inline buttons)
-
-// Onboarding callbacks
-bot.action('onboarding_start', onboardingStartCallback);
-bot.action(/^goal_/, goalCallback);
-bot.action(/^equip_/, equipmentCallback);
-bot.action(/^schedule_/, scheduleCallback);
-bot.action(/^time_/, timeCallback);
 
 // Plan callbacks
 bot.action('plan_today', planTodayCallback);

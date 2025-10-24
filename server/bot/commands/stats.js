@@ -2,6 +2,15 @@ import { Markup } from 'telegraf';
 import { db } from '../../infrastructure/supabase.js';
 import { subDays, format } from 'date-fns';
 import ru from 'date-fns/locale/ru/index.js';
+import { beginChatResponse, replyWithTracking } from '../utils/chat.js';
+import { getProgressionOverview } from '../../services/staticPlan.js';
+
+const EXERCISE_LABELS = {
+    pullups: 'Подтягивания',
+    pushups: 'Отжимания',
+    squats: 'Приседания',
+    legRaises: 'Кор',
+};
 
 /**
  * Команда /stats - показать статистику и прогресс
@@ -10,7 +19,8 @@ export async function statsCommand(ctx) {
     const profileId = ctx.state.profileId;
 
     try {
-        await ctx.reply('⏳ Собираю статистику...');
+        await beginChatResponse(ctx);
+        await replyWithTracking(ctx, '⏳ Собираю статистику...');
 
         // Получаем данные за последние 4 недели
         const endDate = new Date();
@@ -22,10 +32,8 @@ export async function statsCommand(ctx) {
         });
 
         if (!sessions || sessions.length === 0) {
-            await ctx.reply(
-                '📊 Пока нет данных для статистики.\n\n' +
-                'Начни тренироваться и отчитывайся о выполнении — я буду отслеживать твой прогресс!'
-            );
+            await beginChatResponse(ctx);
+            await replyWithTracking(ctx, buildPrimerMessage(), { parse_mode: 'Markdown' });
             return;
         }
 
@@ -38,14 +46,16 @@ export async function statsCommand(ctx) {
             [Markup.button.callback('🏆 Достижения', 'stats_achievements')],
         ]);
 
-        await ctx.reply(statsMessage, { parse_mode: 'Markdown', ...keyboard });
+        await beginChatResponse(ctx);
+        await replyWithTracking(ctx, statsMessage, { parse_mode: 'Markdown', ...keyboard });
 
         // Записываем метрику просмотра статистики
         await db.recordMetric(profileId, 'stats_viewed', 1, 'count');
 
     } catch (error) {
         console.error('Error in stats command:', error);
-        await ctx.reply('😔 Не удалось загрузить статистику. Попробуй позже.');
+        await beginChatResponse(ctx);
+        await replyWithTracking(ctx, '😔 Не удалось загрузить статистику. Попробуй позже.');
     }
 }
 
@@ -153,7 +163,15 @@ function formatStatsMessage(stats) {
 export async function statsDetailedCallback(ctx) {
     await ctx.answerCbQuery();
 
-    await ctx.reply(
+    try {
+        await ctx.deleteMessage();
+    } catch (error) {
+        // Сообщение уже могло быть удалено
+    }
+
+    await beginChatResponse(ctx);
+
+    await replyWithTracking(ctx,
         '📈 **Подробная аналитика**\n\n' +
         'Эта функция будет доступна в WebApp.\n\n' +
         'Там ты увидишь:\n' +
@@ -175,11 +193,19 @@ export async function statsAchievementsCallback(ctx) {
     const profileId = ctx.state.profileId;
 
     try {
+        try {
+            await ctx.deleteMessage();
+        } catch (error) {
+            // Сообщение уже могло быть удалено
+        }
+
+        await beginChatResponse(ctx);
+
         // Получаем достижения из БД (будет реализовано позже)
         const achievements = []; // await getAchievements(profileId);
 
         if (achievements.length === 0) {
-            await ctx.reply(
+            await replyWithTracking(ctx,
                 '🏆 **Достижения**\n\n' +
                 'Пока нет достижений.\n\n' +
                 'Продолжай тренироваться, и они появятся!\n\n' +
@@ -196,13 +222,36 @@ export async function statsAchievementsCallback(ctx) {
                 message += `${ach.emoji} ${ach.title}\n`;
                 message += `   ${ach.description}\n\n`;
             });
-            await ctx.reply(message, { parse_mode: 'Markdown' });
+            await replyWithTracking(ctx, message, { parse_mode: 'Markdown' });
         }
 
     } catch (error) {
         console.error('Error showing achievements:', error);
-        await ctx.reply('😔 Не удалось загрузить достижения.');
+        await beginChatResponse(ctx);
+        await replyWithTracking(ctx, '😔 Не удалось загрузить достижения.');
     }
+}
+
+function buildPrimerMessage() {
+    const overviewKeys = ['pullups', 'pushups', 'squats'];
+    const items = overviewKeys
+        .map(key => ({ key, data: getProgressionOverview(key) }))
+        .filter(item => item.data);
+
+    let message = '📊 **Пока нет данных для статистики**\n\n';
+    message += 'Я веду историю, как только появится первая отметка о тренировке.\n\n';
+
+    if (items.length > 0) {
+        message += 'Базовая программа строится на прогрессиях:\n';
+        message += items.map(({ key, data }) => {
+            const label = EXERCISE_LABELS[key] || key;
+            return `• ${label}: ${data.startLevel} → ${data.peakLevel} (${data.totalSteps} шагов)`;
+        }).join('\n');
+        message += '\n\n';
+    }
+
+    message += 'Отправь первый отчёт — и я покажу регулярность, RPE и серию тренировок.';
+    return message;
 }
 
 export default {

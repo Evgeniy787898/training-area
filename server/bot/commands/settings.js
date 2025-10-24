@@ -1,5 +1,6 @@
 import { Markup } from 'telegraf';
 import { db } from '../../infrastructure/supabase.js';
+import { beginChatResponse, replyWithTracking } from '../utils/chat.js';
 
 /**
  * Команда /settings - настройки бота
@@ -17,7 +18,8 @@ export async function settingsCommand(ctx) {
         [Markup.button.callback('🔕 Пауза уведомлений', 'settings_pause_notifications')],
     ]);
 
-    await ctx.reply(settingsMessage, { parse_mode: 'Markdown', ...keyboard });
+    await beginChatResponse(ctx);
+    await replyWithTracking(ctx, settingsMessage, { parse_mode: 'Markdown', ...keyboard });
 }
 
 /**

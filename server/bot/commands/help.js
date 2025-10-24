@@ -1,4 +1,5 @@
 import { Markup } from 'telegraf';
+import { beginChatResponse, replyWithTracking } from '../utils/chat.js';
 
 /**
  * Команда /help - справка о возможностях бота
@@ -35,7 +36,9 @@ export async function helpCommand(ctx) {
 
         `Начни просто писать, что тебе нужно, и я помогу!`;
 
-    await ctx.reply(helpMessage, Markup.keyboard([
+    await beginChatResponse(ctx);
+
+    await replyWithTracking(ctx, helpMessage, Markup.keyboard([
         ['📅 План на сегодня', '📊 Мой прогресс'],
         ['📝 Отчёт о тренировке', '⚙️ Настройки'],
         ['❓ Помощь'],
