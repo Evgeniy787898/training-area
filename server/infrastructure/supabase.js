@@ -147,6 +147,32 @@ export const db = {
         return data;
     },
 
+    async triggerPlanUpdate(profileId, {
+        reason = 'manual',
+        referenceDate = new Date(),
+        forceFallback = false,
+    } = {}) {
+        try {
+            const body = {
+                profileId,
+                reason,
+                referenceDate: format(referenceDate, 'yyyy-MM-dd'),
+                forceFallback,
+            };
+
+            const { data, error } = await supabase.functions.invoke('update_plan', { body });
+
+            if (error) {
+                throw error;
+            }
+
+            return data;
+        } catch (error) {
+            console.error('Failed to trigger plan update:', error);
+            throw error;
+        }
+    },
+
     async updateTrainingSession(sessionId, updates) {
         const { data, error } = await supabase
             .from('training_sessions')
@@ -346,6 +372,37 @@ export const db = {
         }
 
         return data;
+    },
+
+    async logDialogEvent(profileId, eventType, payload = {}, {
+        abGroup = null,
+        responseLatencyMs = null,
+    } = {}) {
+        try {
+            const { data, error } = await supabase
+                .from('dialog_events')
+                .insert({
+                    profile_id: profileId,
+                    event_type: eventType,
+                    payload,
+                    ab_group: abGroup,
+                    response_latency_ms: responseLatencyMs,
+                })
+                .select()
+                .single();
+
+            if (error) {
+                throw error;
+            }
+
+            return data;
+        } catch (error) {
+            // Table may be missing if migrations aren't applied yet
+            if (error?.code !== '42P01') {
+                console.error('Error logging dialog event:', error);
+            }
+            return null;
+        }
     },
 
     // Dialog states
@@ -556,4 +613,3 @@ export const db = {
 };
 
 export default supabase;
-

@@ -90,6 +90,15 @@ async function trackBotMessage(ctx, message, text) {
                 timestamp: new Date().toISOString(),
             }
         );
+        await db.logDialogEvent(
+            profileId,
+            'bot_message',
+            {
+                message_id: message.message_id,
+                chat_id: message.chat.id,
+                text,
+            }
+        );
     } catch (error) {
         console.error('Failed to log bot message:', error);
     }
@@ -107,6 +116,16 @@ export async function recordUserMessage(profileId, payload) {
         await db.logEvent(profileId, 'user_message', 'info', payload);
     } catch (error) {
         console.error('Failed to log user message:', error);
+    }
+
+    try {
+        await db.logDialogEvent(
+            profileId,
+            payload.type === 'callback' ? 'user_callback' : 'user_text',
+            payload
+        );
+    } catch (error) {
+        console.error('Failed to log dialog event for user message:', error);
     }
 }
 

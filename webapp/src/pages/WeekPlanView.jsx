@@ -5,14 +5,15 @@ import { apiClient } from '../api/client';
 import { useAppContext } from '../context/AppContext';
 import SkeletonCard from '../components/SkeletonCard';
 import ErrorState from '../components/ErrorState';
+import { buildStaticPlan } from '../services/staticPlan';
 
 const WeekPlanView = () => {
     const { showToast } = useAppContext();
     const [referenceDate, setReferenceDate] = useState(new Date());
-    const [state, setState] = useState({ loading: true, sessions: [], source: null, week: null, error: null });
+    const [state, setState] = useState({ loading: true, sessions: [], source: null, week: null, error: null, fallback: false });
 
     const loadWeek = useCallback(async (date) => {
-        setState(prev => ({ ...prev, loading: true, error: null }));
+        setState(prev => ({ ...prev, loading: true, error: null, fallback: false }));
         try {
             const { data } = await apiClient.getWeekPlan(format(date, 'yyyy-MM-dd'));
             setState({
@@ -21,11 +22,30 @@ const WeekPlanView = () => {
                 source: data.source,
                 week: { start: data.week_start, end: data.week_end },
                 error: null,
+                fallback: false,
             });
         } catch (error) {
-            setState({ loading: false, sessions: [], source: null, week: null, error });
+            const plan = buildStaticPlan(date);
+            if (plan.sessions?.length) {
+                setState({
+                    loading: false,
+                    sessions: plan.sessions,
+                    source: 'static_plan',
+                    week: { start: plan.week_start, end: plan.week_end },
+                    error: null,
+                    fallback: true,
+                });
+                showToast({
+                    title: 'Показан пример недели',
+                    message: error.message,
+                    type: 'warning',
+                    traceId: error.traceId,
+                });
+            } else {
+                setState({ loading: false, sessions: [], source: null, week: null, error, fallback: false });
+            }
         }
-    }, []);
+    }, [showToast]);
 
     useEffect(() => {
         loadWeek(referenceDate);
@@ -113,7 +133,7 @@ const WeekPlanView = () => {
                     </div>
                     <div className="stat-item">
                         <span className="stat-label">Источник</span>
-                        <span className="stat-value">{state.source === 'fallback' ? 'базовый план' : 'Supabase'}</span>
+                        <span className="stat-value">{state.fallback ? 'локальный пример' : state.source === 'fallback' ? 'базовый план' : 'Supabase'}</span>
                     </div>
                     <button className="btn btn-secondary" onClick={onOpenInChat}>
                         Открыть в чате
@@ -131,15 +151,21 @@ const WeekPlanView = () => {
                 <button className="btn btn-secondary" onClick={() => handleChangeWeek(-1)} aria-label="Предыдущая неделя">
                     ←
                 </button>
-                <div className="week-range">
-                    {state.week
-                        ? `${format(parseISO(state.week.start), 'd MMM', { locale: ru })} — ${format(parseISO(state.week.end), 'd MMM', { locale: ru })}`
-                        : format(referenceDate, 'd MMM', { locale: ru })}
-                </div>
-                <button className="btn btn-secondary" onClick={() => handleChangeWeek(1)} aria-label="Следующая неделя">
+            <div className="week-range">
+                {state.week
+                    ? `${format(parseISO(state.week.start), 'd MMM', { locale: ru })} — ${format(parseISO(state.week.end), 'd MMM', { locale: ru })}`
+                    : format(referenceDate, 'd MMM', { locale: ru })}
+            </div>
+            <button className="btn btn-secondary" onClick={() => handleChangeWeek(1)} aria-label="Следующая неделя">
                     →
                 </button>
             </div>
+
+            {state.fallback && (
+                <p className="text-muted" style={{ marginBottom: '12px' }}>
+                    Показана офлайн-версия плана. Для актуальных данных перезапусти WebApp из чата.
+                </p>
+            )}
 
             {renderContent()}
         </div>
@@ -147,4 +173,3 @@ const WeekPlanView = () => {
 };
 
 export default WeekPlanView;
-

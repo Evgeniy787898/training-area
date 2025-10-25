@@ -21,8 +21,8 @@ const ReportView = () => {
                 <p className="text-muted">Отчёт заполняется в чате, чтобы бот смог проанализировать результаты и дать рекомендации.</p>
                 <ol className="report-steps">
                     <li>Открой чат и введи команду <code>/report</code>.</li>
-                    <li>Выбери тренировку, оцени RPE и отметь выполнение.</li>
-                    <li>Добавь заметки — бот подстроит план и сохранит прогресс.</li>
+                    <li>Впиши, что сделал по каждому упражнению (например, «Подтягивания 3x8»).</li>
+                    <li>Оцени RPE, подтверди выполнение и добавь заметки — бот адаптирует план.</li>
                 </ol>
 
                 <button className="btn btn-primary" onClick={handleOpenChat}>
@@ -34,4 +34,3 @@ const ReportView = () => {
 };
 
 export default ReportView;
-

@@ -18,6 +18,8 @@ import { planCommand, planTodayCallback } from './commands/plan.js';
 import {
     reportCommand,
     reportSessionCallback,
+    performanceSkipCallback,
+    handlePerformanceText,
     rpeCallback,
     completionCallback,
     notesSkipCallback,
@@ -28,15 +30,8 @@ import {
     settingsCommand,
     settingsNotificationTimeCallback,
     setTimeCallback,
-    settingsTimezoneCallback,
-    setTimezoneCallback,
     settingsPauseNotificationsCallback,
     settingsBackCallback,
-    settingsGoalsCallback,
-    setGoalCallback,
-    settingsEquipmentCallback,
-    toggleEquipmentCallback,
-    settingsEquipmentSaveCallback
 } from './commands/settings.js';
 import {
     sessionRescheduleCallback,
@@ -45,6 +40,13 @@ import {
     startNaturalRescheduleFlow
 } from './commands/reschedule.js';
 import { mainMenuCallbackId } from './utils/menu.js';
+import {
+    handleGoalSelection,
+    handleEquipmentToggle,
+    handleEquipmentComplete,
+    handleFrequencySelection,
+    completeOnboarding,
+} from './commands/onboarding.js';
 
 console.log('🤖 Initializing Training Bot...');
 
@@ -73,6 +75,7 @@ bot.action('plan_today', planTodayCallback);
 
 // Report callbacks
 bot.action(/^report_session_/, reportSessionCallback);
+bot.action('report_performance_skip', performanceSkipCallback);
 bot.action(/^rpe_/, rpeCallback);
 bot.action(/^completion_/, completionCallback);
 bot.action('notes_skip', notesSkipCallback);
@@ -84,21 +87,33 @@ bot.action('stats_achievements', statsAchievementsCallback);
 // Settings callbacks
 bot.action('settings_notification_time', settingsNotificationTimeCallback);
 bot.action(/^set_time_/, setTimeCallback);
-bot.action('settings_timezone', settingsTimezoneCallback);
-bot.action(/^set_tz_/, setTimezoneCallback);
 bot.action('settings_pause_notifications', settingsPauseNotificationsCallback);
 bot.action('settings_back', settingsBackCallback);
-bot.action('settings_goals', settingsGoalsCallback);
-bot.action(/^set_goal_/, setGoalCallback);
-bot.action('settings_equipment', settingsEquipmentCallback);
-bot.action(/^equip_toggle_/, toggleEquipmentCallback);
-bot.action('equip_save', settingsEquipmentSaveCallback);
 
 bot.action(mainMenuCallbackId(), async (ctx) => {
     if (ctx.updateType === 'callback_query') {
         await ctx.answerCbQuery('Главное меню');
     }
     await startCommand(ctx);
+});
+
+// Onboarding callbacks
+bot.action(/^onboard_goal_/, handleGoalSelection);
+bot.action(/^onboard_equipment_/, handleEquipmentToggle);
+bot.action('onboard_next_step', handleEquipmentComplete);
+bot.action(/^onboard_frequency_/, async (ctx) => {
+    await handleFrequencySelection(ctx, {
+        onComplete: async (context, payload) => {
+            const result = await completeOnboarding(context, payload);
+            if (result?.profile) {
+                context.state.profile = result.profile;
+                await startCommand(context, {
+                    skipOnboarding: true,
+                    introSummary: result.summary,
+                });
+            }
+        },
+    });
 });
 
 // Reschedule callbacks
@@ -116,8 +131,16 @@ bot.on('text', async (ctx, next) => {
             m.db.getDialogState(ctx.state.profileId, 'report')
         );
 
-    if (reportState && reportState.state_payload?.step === 'notes') {
-        await notesTextHandler(ctx);
+    if (reportState?.state_payload?.step === 'performance') {
+        const handled = await handlePerformanceText(ctx);
+        if (handled) {
+            return;
+        }
+    } else if (reportState && reportState.state_payload?.step === 'notes') {
+        const handled = await notesTextHandler(ctx);
+        if (handled) {
+            return;
+        }
         return;
     }
 
@@ -342,4 +365,3 @@ async function handleMotivationIntent(ctx) {
         await ctx.reply('Ты уже сделал большой шаг! Продолжай, и всё получится 💪');
     }
 }
-

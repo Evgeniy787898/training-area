@@ -3,23 +3,36 @@ import { db } from '../../infrastructure/supabase.js';
 import { beginChatResponse, replyWithTracking } from '../utils/chat.js';
 import { buildDefaultWeekPlan } from '../../services/staticPlan.js';
 import { buildMainMenuKeyboard } from '../utils/menu.js';
+import { startOnboarding } from './onboarding.js';
 
 const PLAN_CACHE_STATE = 'ui_cached_plan';
 
 /**
  * Команда /start — сразу показывает доступный функционал без онбординга.
  */
-export async function startCommand(ctx) {
+export async function startCommand(ctx, options = {}) {
     const profile = ctx.state.profile;
     const profileId = ctx.state.profileId;
     const firstName = ctx.from?.first_name || 'друг';
+
+    const onboardingCompleted = profile?.preferences?.onboarding_status === 'completed';
+
+    if (!options.skipOnboarding && !onboardingCompleted) {
+        await startOnboarding(ctx);
+        return;
+    }
 
     await beginChatResponse(ctx);
 
     await ensureWeeklyPlan(profile, profileId);
 
+    const introSummary = options.introSummary
+        ? `${options.introSummary.trim()}\n\n`
+        : '';
+
     const frequency = profile?.preferences?.training_frequency || 4;
     const message =
+        `${introSummary}` +
         `Привет, ${firstName}! 👟 Я уже готов помочь.\n\n` +
         `📅 План на неделю собран по базовой программе и учитывает ${frequency} тренировки.\n` +
         `📝 Можешь сразу отправить отчёт — подскажу, как скорректировать нагрузку.\n` +
@@ -50,6 +63,21 @@ async function ensureWeeklyPlan(profile, profileId) {
         });
 
         if (sessions && sessions.length > 0) {
+            await db.clearDialogState(profileId, PLAN_CACHE_STATE);
+            return;
+        }
+
+        await db.triggerPlanUpdate(profileId, {
+            reason: 'start_command',
+            referenceDate: today,
+        });
+
+        const refreshed = await db.getTrainingSessions(profileId, {
+            startDate,
+            endDate,
+        });
+
+        if (refreshed && refreshed.length > 0) {
             await db.clearDialogState(profileId, PLAN_CACHE_STATE);
             return;
         }

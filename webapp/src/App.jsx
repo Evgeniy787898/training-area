@@ -106,6 +106,7 @@ function App() {
         refreshProfile: loadProfile,
         showToast: pushToast,
         lastTraceId,
+        setActiveTab,
     };
 
     return (
@@ -154,4 +155,3 @@ function App() {
 }
 
 export default App;
-

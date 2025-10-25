@@ -2,12 +2,20 @@ import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const supabaseUrl = 'https://buqjktrypviesnucczjr.supabase.co';
-const supabaseKey = 'sb_secret_Ls98mNh34FpF-8ca8qg6yg_sikMhdkd';
+dotenv.config({ path: join(__dirname, '.env') });
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('❌ SUPABASE_URL и SUPABASE_SERVICE_KEY должны быть заданы в server/.env');
+  process.exit(1);
+}
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -86,4 +94,3 @@ async function applyMigrations() {
 }
 
 applyMigrations().catch(console.error);
-

@@ -2,20 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { apiClient } from '../api/client';
 import { useAppContext } from '../context/AppContext';
 
-const TIMEZONES = [
-    'Europe/Moscow',
-    'Europe/Kaliningrad',
-    'Europe/Samara',
-    'Asia/Yekaterinburg',
-    'Asia/Novosibirsk',
-    'Asia/Vladivostok',
-];
-
 const SettingsView = () => {
     const { profileSummary, refreshProfile, showToast } = useAppContext();
     const [form, setForm] = useState({
         notification_time: '06:00',
-        timezone: 'Europe/Moscow',
         notifications_paused: false,
     });
     const [saving, setSaving] = useState(false);
@@ -28,7 +18,6 @@ const SettingsView = () => {
         const notification = profileSummary.profile.notification_time?.slice(0, 5) || '06:00';
         setForm({
             notification_time: notification,
-            timezone: profileSummary.profile.timezone || 'Europe/Moscow',
             notifications_paused: profileSummary.profile.notifications_paused || false,
         });
     }, [profileSummary]);
@@ -47,7 +36,6 @@ const SettingsView = () => {
         try {
             const payload = {
                 notification_time: form.notification_time,
-                timezone: form.timezone,
                 notifications_paused: form.notifications_paused,
             };
             await apiClient.updatePreferences(payload);
@@ -77,15 +65,6 @@ const SettingsView = () => {
                     />
                 </div>
 
-                <div className="form-field">
-                    <label htmlFor="timezone">Часовой пояс</label>
-                    <select id="timezone" name="timezone" value={form.timezone} onChange={handleChange}>
-                        {TIMEZONES.map(tz => (
-                            <option key={tz} value={tz}>{tz}</option>
-                        ))}
-                    </select>
-                </div>
-
                 <div className="form-field checkbox-field">
                     <label htmlFor="notifications_paused">Пауза уведомлений</label>
                     <input
@@ -106,6 +85,7 @@ const SettingsView = () => {
                 <h3>ℹ️ Советы</h3>
                 <p className="text-muted">Измени время уведомления — бот подстроит рассылку на следующий день.</p>
                 <p className="text-muted">Пауза помогает отключить напоминания на время отпуска.</p>
+                <p className="text-muted">Текущий часовой пояс: {profileSummary?.profile?.timezone || 'Europe/Moscow'} (изменение доступно по запросу тренеру).</p>
                 <button className="btn btn-secondary" onClick={() => window.Telegram?.WebApp?.close()}>
                     Вернуться в чат
                 </button>
@@ -115,4 +95,3 @@ const SettingsView = () => {
 };
 
 export default SettingsView;
-

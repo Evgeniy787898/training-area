@@ -5,20 +5,39 @@ import { apiClient } from '../api/client';
 import { useAppContext } from '../context/AppContext';
 import SkeletonCard from '../components/SkeletonCard';
 import ErrorState from '../components/ErrorState';
+import { getStaticSessionForDate } from '../services/staticPlan';
 
 const TodayView = () => {
-    const { showToast, refreshProfile } = useAppContext();
-    const [state, setState] = useState({ loading: true, session: null, source: null, error: null });
+    const { showToast, refreshProfile, setActiveTab } = useAppContext();
+    const [state, setState] = useState({ loading: true, session: null, source: null, error: null, fallback: false });
 
     const loadSession = useCallback(async () => {
-        setState(prev => ({ ...prev, loading: true, error: null }));
+        setState(prev => ({ ...prev, loading: true, error: null, fallback: false }));
         try {
             const { data, traceId } = await apiClient.getTodaySession();
-            setState({ loading: false, session: data.session, source: data.source, error: null, traceId });
+            setState({ loading: false, session: data.session, source: data.source, error: null, traceId, fallback: false });
         } catch (error) {
-            setState({ loading: false, session: null, source: null, error });
+            const fallbackSession = getStaticSessionForDate(new Date());
+            if (fallbackSession) {
+                setState({
+                    loading: false,
+                    session: fallbackSession,
+                    source: 'static_plan',
+                    error: null,
+                    traceId: null,
+                    fallback: true,
+                });
+                showToast({
+                    title: 'Показан пример тренировки',
+                    message: error.message,
+                    type: 'warning',
+                    traceId: error.traceId,
+                });
+            } else {
+                setState({ loading: false, session: null, source: null, error, fallback: false });
+            }
         }
-    }, []);
+    }, [showToast]);
 
     useEffect(() => {
         loadSession();
@@ -57,6 +76,15 @@ const TodayView = () => {
         showToast({
             title: 'Перенос тренировки',
             message: 'Для переноса напиши в чат «Перенеси тренировку на завтра».',
+            type: 'info',
+        });
+    };
+
+    const handleOpenExercises = () => {
+        setActiveTab?.('exercises');
+        showToast({
+            title: 'Прогрессии упражнений',
+            message: 'Открыл раздел с уровнями и подсказками по технике.',
             type: 'info',
         });
     };
@@ -115,7 +143,7 @@ const TodayView = () => {
                 </div>
 
                 <p className="text-muted source-label">
-                    Источник данных: {state.source === 'fallback' ? 'базовый план' : 'Supabase'}
+                    Источник: {state.fallback ? 'локальный пример' : state.source === 'fallback' ? 'базовый план' : 'Supabase'}
                 </p>
 
                 <div className="exercises-list">
@@ -143,6 +171,9 @@ const TodayView = () => {
                     <button className="btn btn-secondary" onClick={handleReschedule}>
                         🔄 Перенести
                     </button>
+                    <button className="btn btn-secondary" onClick={handleOpenExercises}>
+                        📚 Прогрессии
+                    </button>
                 </div>
             </div>
 
@@ -151,10 +182,14 @@ const TodayView = () => {
                 <p>
                     Отмечай заметки после тренировки — это помогает боту адаптировать план и держать прогрессию под контролем.
                 </p>
+                {state.fallback && (
+                    <p className="text-muted">
+                        Показана офлайн-версии плана. Для точных данных перезапусти WebApp из чата.
+                    </p>
+                )}
             </div>
         </div>
     );
 };
 
 export default TodayView;
-
