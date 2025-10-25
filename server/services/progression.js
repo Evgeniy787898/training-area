@@ -9,7 +9,6 @@ export class ProgressionService {
      */
     async analyzeExercise(exerciseData) {
         const {
-            exerciseKey,
             targetSets,
             targetReps,
             actualSets,

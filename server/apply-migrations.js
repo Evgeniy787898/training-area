@@ -42,8 +42,8 @@ async function applyMigrations() {
     console.log(`[${i + 1}/${commands.length}] Выполняю...`);
     
     try {
-      const { data, error } = await supabase.rpc('exec_sql', { 
-        sql_query: command 
+      const { error } = await supabase.rpc('exec_sql', {
+        sql_query: command
       }).catch(async () => {
         // Если rpc не работает, пробуем через прямой запрос
         const response = await fetch(`${supabaseUrl}/rest/v1/rpc/exec_sql`, {
@@ -59,8 +59,8 @@ async function applyMigrations() {
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${await response.text()}`);
         }
-        
-        return { data: await response.json(), error: null };
+
+        return { error: null };
       });
 
       if (error) {
@@ -78,7 +78,7 @@ async function applyMigrations() {
   // Проверяем таблицы
   console.log('🔍 Проверяю созданные таблицы...\n');
   
-  const { data: tables, error: tablesError } = await supabase
+  const { error: tablesError } = await supabase
     .from('profiles')
     .select('count')
     .limit(0);
