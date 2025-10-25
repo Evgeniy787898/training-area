@@ -1,4 +1,26 @@
-const DEFAULT_BASE_URL = import.meta.env.VITE_API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+const RAW_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || '';
+const DEV_PROFILE_ID = import.meta.env.VITE_DEV_PROFILE_ID?.trim() || null;
+const DEV_TELEGRAM_ID = import.meta.env.VITE_DEV_TELEGRAM_ID?.trim() || null;
+const DEV_AUTH_TOKEN = import.meta.env.VITE_DEV_AUTH_TOKEN?.trim() || null;
+const DEV_INIT_DATA = import.meta.env.VITE_DEV_INIT_DATA?.trim() || null;
+
+function buildUrl(path) {
+    if (!path) {
+        return path;
+    }
+
+    if (!RAW_BASE_URL) {
+        return path;
+    }
+
+    try {
+        const base = RAW_BASE_URL.endsWith('/') ? RAW_BASE_URL : `${RAW_BASE_URL}/`;
+        const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+        return new URL(cleanPath, base).toString();
+    } catch (error) {
+        return `${RAW_BASE_URL}${path}`;
+    }
+}
 
 let telegramId = null;
 let telegramInitData = null;
@@ -9,7 +31,7 @@ export function configureClient({ telegramUser, initData }) {
 }
 
 async function request(path, { method = 'GET', body, headers } = {}) {
-    const url = `${DEFAULT_BASE_URL}${path}`;
+    const url = buildUrl(path) || path;
     const init = { method, headers: new Headers(headers || {}) };
 
     if (telegramId) {
@@ -18,6 +40,21 @@ async function request(path, { method = 'GET', body, headers } = {}) {
 
     if (telegramInitData) {
         init.headers.set('X-Telegram-Init-Data', telegramInitData);
+    }
+
+    if (import.meta.env.DEV) {
+        if (DEV_PROFILE_ID) {
+            init.headers.set('X-Profile-Id', DEV_PROFILE_ID);
+        }
+        if (!telegramId && DEV_TELEGRAM_ID) {
+            init.headers.set('X-Telegram-Id', DEV_TELEGRAM_ID);
+        }
+        if (!telegramInitData && DEV_INIT_DATA) {
+            init.headers.set('X-Telegram-Init-Data', DEV_INIT_DATA);
+        }
+        if (DEV_AUTH_TOKEN) {
+            init.headers.set('X-Auth-Token', DEV_AUTH_TOKEN);
+        }
     }
 
     if (body !== undefined) {
