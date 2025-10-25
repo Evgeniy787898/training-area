@@ -6,13 +6,14 @@ import { apiClient } from '../api/client';
 import { useAppContext } from '../context/AppContext';
 import SkeletonCard from '../components/SkeletonCard';
 import ErrorState from '../components/ErrorState';
+import { DEMO_ANALYTICS } from '../services/demoData';
 
 const ProgressView = () => {
-    const { profileSummary } = useAppContext();
-    const [state, setState] = useState({ loading: true, error: null, volume: null, rpe: null, achievements: [] });
+    const { profileSummary, showToast, demoMode } = useAppContext();
+    const [state, setState] = useState({ loading: true, error: null, volume: null, rpe: null, achievements: [], fallback: false });
 
     const loadAnalytics = useCallback(async () => {
-        setState(prev => ({ ...prev, loading: true, error: null }));
+        setState(prev => ({ ...prev, loading: true, error: null, fallback: false }));
         try {
             const [volume, rpe, achievements] = await Promise.all([
                 apiClient.getReport('volume_trend', { range: '30d' }),
@@ -26,11 +27,25 @@ const ProgressView = () => {
                 volume: volume.data,
                 rpe: rpe.data,
                 achievements: achievements.data.achievements || [],
+                fallback: false,
             });
         } catch (error) {
-            setState({ loading: false, error, volume: null, rpe: null, achievements: [] });
+            setState({
+                loading: false,
+                error: null,
+                volume: DEMO_ANALYTICS.volume,
+                rpe: DEMO_ANALYTICS.rpe,
+                achievements: DEMO_ANALYTICS.achievements,
+                fallback: true,
+            });
+            showToast?.({
+                title: 'Демо статистика',
+                message: 'Не удалось загрузить аналитику. Показываю пример для ориентира.',
+                type: 'warning',
+                traceId: error.traceId,
+            });
         }
-    }, []);
+    }, [showToast]);
 
     useEffect(() => {
         loadAnalytics();
@@ -108,6 +123,12 @@ const ProgressView = () => {
     return (
         <div className="view progress-view">
             <h2>📊 Твой прогресс</h2>
+
+            {(state.fallback || demoMode) && (
+                <p className="text-muted demo-callout">
+                    Показаны примерочные графики, чтобы увидеть, как выглядит аналитика. Подключи бота из Telegram, чтобы получать реальные данные.
+                </p>
+            )}
 
             <div className="stats-summary">
                 <div className="stat-card">
