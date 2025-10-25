@@ -343,7 +343,7 @@ async function finalizeReport(ctx, notes) {
 
         const updatedExercises = mergePerformanceIntoSession(performance, session);
 
-        const updatedSession = await db.updateTrainingSession(sessionId, {
+        await db.updateTrainingSession(sessionId, {
             status: completionValue > 50 ? 'done' : 'skipped',
             rpe,
             notes: notes || '',

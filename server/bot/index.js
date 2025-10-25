@@ -7,7 +7,7 @@ import {
     errorMiddleware,
     dialogStateMiddleware
 } from './middleware/auth.js';
-import { detectIntent } from '../services/nlu.js';
+import aiCommandRouter from '../services/aiCommandRouter.js';
 import plannerService from '../services/planner.js';
 import conversationService from '../services/conversation.js';
 import { db } from '../infrastructure/supabase.js';
@@ -76,6 +76,30 @@ bot.command('setup', startOnboarding);
 
 // Plan callbacks
 bot.action('plan_today', planTodayCallback);
+bot.action('open_week_plan', async (ctx) => {
+    await ctx.answerCbQuery('План на неделю');
+    await planCommand(ctx);
+});
+
+bot.action('open_report', async (ctx) => {
+    await ctx.answerCbQuery('Отчёт о тренировке');
+    await reportCommand(ctx);
+});
+
+bot.action('open_stats', async (ctx) => {
+    await ctx.answerCbQuery('Прогресс');
+    await statsCommand(ctx);
+});
+
+bot.action('open_settings', async (ctx) => {
+    await ctx.answerCbQuery('Настройки');
+    await settingsCommand(ctx);
+});
+
+bot.action('open_help', async (ctx) => {
+    await ctx.answerCbQuery('Что умею');
+    await helpCommand(ctx);
+});
 
 // Report callbacks
 bot.action(/^report_session_/, reportSessionCallback);
@@ -160,69 +184,44 @@ bot.on('text', async (ctx, next) => {
     } else if (text === '❓ Помощь') {
         await helpCommand(ctx);
     } else {
-        const { intent, entities } = detectIntent(text);
+        const aiDecision = await aiCommandRouter.interpret({
+            profile: ctx.state.profile,
+            message: text,
+            history: ctx.state.dialogState?.history || [],
+        });
 
-        switch (intent) {
-            case 'plan.today':
-                await planTodayCallback(ctx);
-                break;
-            case 'plan.week':
-                await planCommand(ctx);
-                break;
-            case 'plan.setup':
-                await startOnboarding(ctx);
-                break;
-            case 'report.start':
-                await reportCommand(ctx);
-                break;
-            case 'stats.show':
-                await statsCommand(ctx);
-                break;
-            case 'settings.open':
-                await settingsCommand(ctx);
-                break;
-            case 'schedule.reschedule':
-                await startNaturalRescheduleFlow(ctx, entities);
-                break;
-            case 'remind.later':
-                await handleReminderIntent(ctx, entities?.reminder);
-                break;
-            case 'recovery.mode':
-                await handleRecoveryIntent(ctx, text);
-                break;
-            case 'motivation':
-                await handleMotivationIntent(ctx);
-                break;
-            case 'help':
-                await helpCommand(ctx);
-                break;
-            default:
-                try {
-                    const aiReply = await conversationService.generateReply({
-                        profile: ctx.state.profile,
-                        message: text,
-                    });
-
-                    if (aiReply) {
-                        await ctx.reply(aiReply);
-                    } else {
-                        await replyWithTracking(
-                            ctx,
-                            '🤔 Пока не распознал запрос.\n\n' +
-                            'Выбери действие на клавиатуре или открой WebApp кнопкой ниже — там всегда доступен план, прогресс и отчёты.',
-                            withMainMenuButton()
-                        );
-                    }
-                } catch (error) {
-                    console.error('Fallback AI reply failed:', error);
-                    await replyWithTracking(
-                        ctx,
-                        '🤔 Пока не распознал запрос.\n\n' +
-                        'Выбери действие на клавиатуре или открой WebApp кнопкой ниже — там всегда доступен план, прогресс и отчёты.',
-                        withMainMenuButton()
-                    );
+        if (aiDecision.needs_clarification && aiDecision.clarification_question) {
+            const keyboard = withMainMenuButton();
+            await replyWithTracking(
+                ctx,
+                aiDecision.clarification_question,
+                {
+                    ...keyboard,
                 }
-                break;
+            );
+            return;
+        }
+
+        const handled = await handleAiDecision(ctx, aiDecision, text);
+
+        if (!handled) {
+            try {
+                const aiReply = await conversationService.generateReply({
+                    profile: ctx.state.profile,
+                    message: text,
+                });
+
+                if (aiReply) {
+                    await replyWithTracking(ctx, aiReply, {
+                        disable_web_page_preview: true,
+                    });
+                } else {
+                    await sendUnknownIntentMessage(ctx, aiDecision.candidate_intents);
+                }
+            } catch (error) {
+                console.error('Fallback AI reply failed:', error);
+                await sendUnknownIntentMessage(ctx, aiDecision.candidate_intents);
+            }
         }
     }
 
@@ -287,6 +286,147 @@ bootstrap().catch(error => {
 
 export default bot;
 
+const INTENT_LABELS = {
+    plan_today: 'Показать план на сегодня',
+    plan_week: 'Открыть план на неделю',
+    plan_customize: 'Настроить план',
+    report_start: 'Отправить отчёт',
+    stats_show: 'Показать прогресс',
+    settings_open: 'Изменить настройки',
+    schedule_reschedule: 'Перенести тренировку',
+    remind_later: 'Напомнить позже',
+    recovery_mode: 'Включить режим восстановления',
+    motivation: 'Получить мотивацию',
+    technique_tip: 'Совет по технике',
+    analytics_graph: 'Аналитика',
+    explain_recommendation: 'Пояснение рекомендаций',
+    help: 'Справка по возможностям',
+};
+
+async function handleAiDecision(ctx, decision, originalText) {
+    const { intent, slots, assistant_reply: assistantReply, secondary_intent: secondaryIntent } = decision;
+    let assistantHandled = false;
+
+    switch (intent) {
+        case 'plan_today':
+            await planTodayCallback(ctx);
+            break;
+        case 'plan_week':
+            await planCommand(ctx);
+            break;
+        case 'plan_customize':
+            await startOnboarding(ctx);
+            break;
+        case 'report_start':
+            await reportCommand(ctx);
+            break;
+        case 'stats_show':
+            await statsCommand(ctx);
+            break;
+        case 'settings_open':
+            await settingsCommand(ctx);
+            break;
+        case 'schedule_reschedule': {
+            const entities = buildRescheduleEntities(slots);
+            await startNaturalRescheduleFlow(ctx, entities);
+            break;
+        }
+        case 'remind_later':
+            await handleReminderIntent(ctx, slots?.reminder || null);
+            break;
+        case 'recovery_mode':
+            await handleRecoveryIntent(ctx, originalText, slots || {});
+            break;
+        case 'motivation':
+            await handleMotivationIntent(ctx);
+            break;
+        case 'help':
+            await helpCommand(ctx);
+            break;
+        case 'technique_tip':
+        case 'analytics_graph':
+        case 'explain_recommendation':
+        case 'fallback_conversation':
+            if (assistantReply) {
+                await sendAssistantReply(ctx, assistantReply);
+                assistantHandled = true;
+            }
+            break;
+        case 'unknown':
+            await sendUnknownIntentMessage(ctx, decision.candidate_intents);
+            return true;
+        default:
+            return false;
+    }
+
+    if (assistantReply && !assistantHandled && !['unknown', 'help'].includes(intent)) {
+        await sendAssistantReply(ctx, assistantReply);
+    }
+
+    if (secondaryIntent && secondaryIntent !== 'unknown') {
+        const keyboard = withMainMenuButton();
+        await replyWithTracking(
+            ctx,
+            `📝 После этого могу также: ${INTENT_LABELS[secondaryIntent] || secondaryIntent}. Просто напиши, если актуально.`,
+            { ...keyboard }
+        );
+    }
+
+    return true;
+}
+
+async function sendAssistantReply(ctx, text) {
+    const formatted = formatAssistantReply(text);
+    await replyWithTracking(ctx, formatted, {
+        disable_web_page_preview: true,
+    });
+}
+
+async function sendUnknownIntentMessage(ctx, candidates = []) {
+    const candidateLines = candidates
+        .filter(item => item.intent && item.intent !== 'unknown')
+        .slice(0, 3)
+        .map(item => `• ${INTENT_LABELS[item.intent] || item.intent}`);
+
+    const baseMessage =
+        '🤔 Нужна точность, чтобы помочь. Уточни задачу или выбери действие из вариантов ниже.';
+
+    const message = candidateLines.length
+        ? `${baseMessage}\n\nВозможные варианты:\n${candidateLines.join('\n')}`
+        : `${baseMessage}\n\nДоступны команды: /plan, /report, /stats, /settings.`;
+
+    const keyboard = withMainMenuButton();
+    await replyWithTracking(ctx, message, { ...keyboard });
+}
+
+function buildRescheduleEntities(slots = {}) {
+    const entities = {};
+    if (typeof slots.preferred_shift_days === 'number') {
+        entities.preferredShiftDays = slots.preferred_shift_days;
+    }
+    if (typeof slots.preferred_day === 'string') {
+        entities.preferredDay = slots.preferred_day;
+    }
+    if (typeof slots.target_date === 'string') {
+        entities.targetDate = slots.target_date;
+    }
+    if (typeof slots.reason === 'string') {
+        entities.reason = slots.reason;
+    }
+    return entities;
+}
+
+function formatAssistantReply(text) {
+    if (!text) {
+        return text;
+    }
+
+    return text
+        .replace(/\*\*(.+?)\*\*/g, (_, heading) => `${heading.toUpperCase()}:`)
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
 async function handleReminderIntent(ctx, reminderEntity) {
     const profileId = ctx.state.profileId;
 
@@ -312,7 +452,7 @@ async function handleReminderIntent(ctx, reminderEntity) {
     }
 
     if (!remindAt) {
-        await ctx.reply('Хорошо! Напомню чуть позже.');
+        await replyWithTracking(ctx, 'Хорошо! Напомню чуть позже.');
         return;
     }
 
@@ -327,10 +467,14 @@ async function handleReminderIntent(ctx, reminderEntity) {
     );
 
     const formattedTime = remindAt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-    await ctx.reply(`Окей! Напомню примерно в ${formattedTime}. Если планы изменятся — просто скажи.`);
+    await replyWithTracking(
+        ctx,
+        `Окей! Напомню примерно в ${formattedTime}. Если планы изменятся — просто скажи.`,
+        { disable_web_page_preview: true }
+    );
 }
 
-async function handleRecoveryIntent(ctx, originalText) {
+async function handleRecoveryIntent(ctx, originalText, slots = {}) {
     const profileId = ctx.state.profileId;
     if (!profileId) {
         return;
@@ -344,14 +488,24 @@ async function handleRecoveryIntent(ctx, originalText) {
         {
             status: 'active',
             trigger: originalText,
+            symptom: slots.symptom || null,
+            severity: slots.severity || null,
             activated_at: new Date().toISOString(),
         },
         expiresAt
     );
 
-    await ctx.reply(
-        'Понял. Переключаемся в мягкий режим восстановления. Я облегчу ближайшие тренировки, а через пару недель спрошу, готов ли ты вернуться к обычной нагрузке. Если нужно отменить — напиши «Я в порядке». '
-    );
+    const summaryParts = [
+        'Понял. Переключаемся в мягкий режим восстановления.',
+    ];
+
+    if (slots.symptom) {
+        summaryParts.push(`Отмечаю симптом: ${slots.symptom}.`);
+    }
+
+    summaryParts.push('Я облегчу ближайшие тренировки и через пару недель уточню самочувствие. Если нужно отменить — напиши «Я в порядке».');
+
+    await replyWithTracking(ctx, summaryParts.join(' '));
 }
 
 async function handleMotivationIntent(ctx) {
@@ -387,9 +541,9 @@ async function handleMotivationIntent(ctx) {
             currentStreak,
         });
 
-        await ctx.reply(message);
+        await replyWithTracking(ctx, message, { disable_web_page_preview: true });
     } catch (error) {
         console.error('Failed to generate motivational message:', error);
-        await ctx.reply('Ты уже сделал большой шаг! Продолжай, и всё получится 💪');
+        await replyWithTracking(ctx, 'Ты уже сделал большой шаг! Продолжай, и всё получится 💪');
     }
 }
