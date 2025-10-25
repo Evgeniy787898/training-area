@@ -8,7 +8,7 @@ import ErrorState from '../components/ErrorState';
 import { getStaticSessionForDate } from '../services/staticPlan';
 
 const TodayView = () => {
-    const { showToast, refreshProfile, setActiveTab } = useAppContext();
+    const { showToast, refreshProfile, setActiveTab, demoMode } = useAppContext();
     const [state, setState] = useState({ loading: true, session: null, source: null, error: null, fallback: false });
 
     const loadSession = useCallback(async () => {
@@ -45,7 +45,13 @@ const TodayView = () => {
 
     const handleMarkDone = async () => {
         if (!state.session?.id) {
-            showToast({ title: 'Нет активной тренировки', type: 'error' });
+            showToast({
+                title: demoMode ? 'Демо режим' : 'Нет активной тренировки',
+                message: demoMode
+                    ? 'В режиме предпросмотра отметки не отправляются на сервер.'
+                    : 'Сессия не найдена — обнови план в приложении.',
+                type: demoMode ? 'info' : 'error',
+            });
             return;
         }
 

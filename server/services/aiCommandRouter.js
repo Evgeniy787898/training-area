@@ -16,6 +16,7 @@ const KNOWN_INTENTS = new Set([
     'analytics_graph',
     'explain_recommendation',
     'help',
+    'open_webapp',
     'fallback_conversation',
     'unknown',
 ]);
@@ -46,8 +47,9 @@ const SYSTEM_PROMPT = `Ты — ИИ-тренер функционального
 - Если нужно уточнение, сформулируй чёткий вопрос (одна попытка) и оставь intent = intent, но установи needs_clarification = true.
 - При fallback_conversation сформируй полноценный assistant_reply по правилам документа, учитывая профиль.
 - Используй контекст профиля для персонализации.
+- Intent open_webapp используй, когда пользователь просит открыть приложение, панель, WebApp или интерфейс. Для него assistant_reply должен быть коротким приветствием и инструкцией открыть панель.
 
-Доступные intents: plan_today, plan_week, plan_customize, report_start, stats_show, settings_open, schedule_reschedule, remind_later, recovery_mode, motivation, technique_tip, analytics_graph, explain_recommendation, help, fallback_conversation, unknown.`;
+Доступные intents: plan_today, plan_week, plan_customize, report_start, stats_show, settings_open, schedule_reschedule, remind_later, recovery_mode, motivation, technique_tip, analytics_graph, explain_recommendation, help, open_webapp, fallback_conversation, unknown.`;
 
 function buildProfileContext(profile) {
     if (!profile) {

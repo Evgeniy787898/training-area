@@ -12,6 +12,7 @@ import ErrorState from './components/ErrorState';
 import Toast from './components/Toast';
 import { AppProvider } from './context/AppContext';
 import { configureClient, apiClient } from './api/client';
+import { DEMO_PROFILE_SUMMARY } from './services/demoData';
 
 const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME || null;
 
@@ -23,6 +24,7 @@ function App() {
     const [profileError, setProfileError] = useState(null);
     const [lastTraceId, setLastTraceId] = useState(null);
     const [toasts, setToasts] = useState([]);
+    const [demoMode, setDemoMode] = useState(false);
 
     useEffect(() => {
         const tg = window.Telegram?.WebApp;
@@ -66,12 +68,16 @@ function App() {
             setProfileSummary(data);
             setProfileError(null);
             setLastTraceId(traceId);
+            setDemoMode(false);
         } catch (error) {
             setProfileError(error);
+            setProfileSummary(DEMO_PROFILE_SUMMARY);
+            setLastTraceId(error.traceId || null);
+            setDemoMode(true);
             pushToast({
-                title: 'Не удалось загрузить профиль',
-                message: error.message,
-                type: 'error',
+                title: 'Демо режим',
+                message: 'Не удалось связаться с сервером. Показаны примерочные данные.',
+                type: 'warning',
                 traceId: error.traceId,
             });
         } finally {
@@ -146,31 +152,96 @@ function App() {
         showToast: pushToast,
         lastTraceId,
         setActiveTab,
+        demoMode,
     };
+
+    const adherenceValue = profileSummary?.adherence?.adherence_percent;
+    const adherenceLabel = typeof adherenceValue === 'number' ? `${adherenceValue}%` : '—';
+    const frequencyValue =
+        profileSummary?.profile?.preferences?.training_frequency ??
+        profileSummary?.profile?.training_frequency ??
+        profileSummary?.preferences?.training_frequency ??
+        null;
+    const frequencyLabel = frequencyValue ? `${frequencyValue} трен/нед` : 'частота по умолчанию';
+    const goalText =
+        profileSummary?.profile?.preferences?.training_goal ||
+        profileSummary?.profile?.goals?.description ||
+        profileSummary?.highlights?.focus ||
+        'Функциональный тренинг';
+    const equipment =
+        profileSummary?.profile?.equipment ||
+        profileSummary?.equipment ||
+        profileSummary?.profile?.preferences?.equipment ||
+        [];
+    const equipmentLabel = Array.isArray(equipment) && equipment.length
+        ? equipment.join(', ')
+        : 'только вес тела';
+    const upcomingSession = profileSummary?.upcoming_session;
+    const upcomingDate = upcomingSession?.date ? new Date(upcomingSession.date) : null;
+    const upcomingLabel = upcomingDate
+        ? upcomingDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })
+        : 'По плану';
+    const nextFocus = upcomingSession?.focus || profileSummary?.highlights?.next_goal || 'Прогрессия подстраивается автоматически';
 
     return (
         <AppProvider value={contextValue}>
             <div className="app">
                 <header className="app-header">
-                    <div>
-                        <h1>💪 Training Bot</h1>
-                        {telegramUser && <p className="user-info">Привет, {telegramUser.first_name}!</p>}
+                    <div className="header-top">
+                        <div className="brand">
+                            <div className="brand-icon">💪</div>
+                            <div>
+                                <h1>Training Bot</h1>
+                                <p className="brand-subtitle">персональный тренер в стиле Gemini</p>
+                            </div>
+                        </div>
+                        <div className="user-chip">
+                            {telegramUser ? `Привет, ${telegramUser.first_name}!` : 'Гость'}
+                            {demoMode && <span className="demo-chip">демо режим</span>}
+                        </div>
                     </div>
-                    <div className="header-meta">
+
+                    <div className="header-status">
                         {lastTraceId && (
                             <span className="trace-id" title="Последний trace id">trace: {lastTraceId}</span>
                         )}
-                        {profileSummary?.adherence && (
+                        {!demoMode && profileSummary?.adherence && (
                             <span className="adherence-badge">
                                 🔥 Регулярность {profileSummary.adherence.adherence_percent}%
                             </span>
                         )}
+                        {demoMode && (
+                            <span className="demo-badge">Режим предпросмотра — подключите WebApp из Telegram</span>
+                        )}
+                    </div>
+
+                    <div className="hero-grid">
+                        <div className="hero-card">
+                            <span className="hero-label">Фокус</span>
+                            <span className="hero-value">{profileSummary?.highlights?.focus || goalText}</span>
+                            <span className="hero-meta">Цель — {profileSummary?.highlights?.next_goal || goalText}</span>
+                        </div>
+                        <div className="hero-card">
+                            <span className="hero-label">Следующая сессия</span>
+                            <span className="hero-value">{upcomingLabel}</span>
+                            <span className="hero-meta">{nextFocus}</span>
+                        </div>
+                        <div className="hero-card">
+                            <span className="hero-label">Регулярность</span>
+                            <span className="hero-value">{adherenceLabel}</span>
+                            <span className="hero-meta">{frequencyLabel}</span>
+                        </div>
+                        <div className="hero-card">
+                            <span className="hero-label">Оборудование</span>
+                            <span className="hero-value">{equipmentLabel}</span>
+                            <span className="hero-meta">Настроим план под текущие условия</span>
+                        </div>
                     </div>
                 </header>
 
                 <main className="app-main">
                     {profileLoading && <SkeletonCard lines={4} />}
-                    {!profileLoading && profileError && (
+                    {!profileLoading && profileError && !demoMode && (
                         <ErrorState
                             title="Не удалось загрузить профиль"
                             message={profileError.message}
