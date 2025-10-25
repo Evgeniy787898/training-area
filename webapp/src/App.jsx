@@ -10,38 +10,19 @@ import SkeletonCard from './components/SkeletonCard';
 import ErrorState from './components/ErrorState';
 import Toast from './components/Toast';
 import { AppProvider } from './context/AppContext';
-import { configureClient, apiClient } from './api/client';
+import { apiClient } from './api/client';
 
 function App() {
     const [activeTab, setActiveTab] = useState('today');
-    const [telegramUser, setTelegramUser] = useState(null);
     const [profileSummary, setProfileSummary] = useState(null);
     const [profileLoading, setProfileLoading] = useState(true);
     const [profileError, setProfileError] = useState(null);
-    const [lastTraceId, setLastTraceId] = useState(null);
     const [toasts, setToasts] = useState([]);
 
-    useEffect(() => {
-        const tg = window.Telegram?.WebApp;
-
-        if (!tg) {
-            setProfileError(new Error('Запустите WebApp внутри Telegram'));
-            setProfileLoading(false);
-            return;
-        }
-
-        tg.ready();
-        tg.expand();
-
-        const user = tg.initDataUnsafe?.user || null;
-        setTelegramUser(user);
-        configureClient({ telegramUser: user });
-    }, []);
-
-    const pushToast = useCallback(({ title, message, type = 'info', traceId }) => {
+    const pushToast = useCallback(({ title, message, type = 'info' }) => {
         setToasts(prev => [
             ...prev,
-            { id: `${Date.now()}-${Math.random()}`, title, message, type, traceId },
+            { id: `${Date.now()}-${Math.random()}`, title, message, type },
         ]);
     }, []);
 
@@ -50,34 +31,26 @@ function App() {
     }, []);
 
     const loadProfile = useCallback(async () => {
-        if (!telegramUser) {
-            return;
-        }
-
         setProfileLoading(true);
         try {
-            const { data, traceId } = await apiClient.getProfileSummary();
+            const { data } = await apiClient.getProfileSummary();
             setProfileSummary(data);
             setProfileError(null);
-            setLastTraceId(traceId);
         } catch (error) {
             setProfileError(error);
             pushToast({
                 title: 'Не удалось загрузить профиль',
                 message: error.message,
                 type: 'error',
-                traceId: error.traceId,
             });
         } finally {
             setProfileLoading(false);
         }
-    }, [telegramUser, pushToast]);
+    }, [pushToast]);
 
     useEffect(() => {
-        if (telegramUser) {
-            loadProfile();
-        }
-    }, [telegramUser, loadProfile]);
+        loadProfile();
+    }, [loadProfile]);
 
     const renderView = () => {
         switch (activeTab) {
@@ -99,13 +72,11 @@ function App() {
     };
 
     const contextValue = {
-        telegramUser,
         profileSummary,
         profileLoading,
         profileError,
         refreshProfile: loadProfile,
         showToast: pushToast,
-        lastTraceId,
     };
 
     return (
@@ -113,13 +84,12 @@ function App() {
             <div className="app">
                 <header className="app-header">
                     <div>
-                        <h1>💪 Training Bot</h1>
-                        {telegramUser && <p className="user-info">Привет, {telegramUser.first_name}!</p>}
+                        <h1>💪 Training Planner</h1>
+                        <p className="user-info">
+                            Привет, {profileSummary?.profile?.name || 'атлет'}!
+                        </p>
                     </div>
                     <div className="header-meta">
-                        {lastTraceId && (
-                            <span className="trace-id" title="Последний trace id">trace: {lastTraceId}</span>
-                        )}
                         {profileSummary?.adherence && (
                             <span className="adherence-badge">
                                 🔥 Регулярность {profileSummary.adherence.adherence_percent}%

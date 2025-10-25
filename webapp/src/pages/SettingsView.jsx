@@ -54,7 +54,7 @@ const SettingsView = () => {
             showToast({ title: 'Настройки обновлены', type: 'success' });
             await refreshProfile?.();
         } catch (error) {
-            showToast({ title: 'Не удалось обновить настройки', message: error.message, type: 'error', traceId: error.traceId });
+            showToast({ title: 'Не удалось обновить настройки', message: error.message, type: 'error' });
         } finally {
             setSaving(false);
         }
@@ -104,11 +104,8 @@ const SettingsView = () => {
 
             <div className="card">
                 <h3>ℹ️ Советы</h3>
-                <p className="text-muted">Измени время уведомления — бот подстроит рассылку на следующий день.</p>
-                <p className="text-muted">Пауза помогает отключить напоминания на время отпуска.</p>
-                <button className="btn btn-secondary" onClick={() => window.Telegram?.WebApp?.close()}>
-                    Вернуться в чат
-                </button>
+                <p className="text-muted">Измени время уведомления — напоминания придут к указанному часу.</p>
+                <p className="text-muted">Пауза поможет отключить сигналы на время отпуска или восстановления.</p>
             </div>
         </div>
     );

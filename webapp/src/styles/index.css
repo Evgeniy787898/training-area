@@ -63,11 +63,6 @@ body {
     font-size: 12px;
 }
 
-.trace-id {
-    font-family: monospace;
-    opacity: 0.75;
-}
-
 .adherence-badge {
     background: rgba(255, 255, 255, 0.15);
     padding: 4px 10px;
@@ -470,13 +465,6 @@ body {
 
 .toast-message {
     font-size: 13px;
-    color: var(--text-secondary);
-}
-
-.toast-trace {
-    font-size: 11px;
-    font-family: monospace;
-    margin-top: 4px;
     color: var(--text-secondary);
 }
 
