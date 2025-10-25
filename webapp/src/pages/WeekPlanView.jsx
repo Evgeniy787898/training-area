@@ -2,12 +2,10 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { addDays, format, isToday, parseISO } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { apiClient } from '../api/client';
-import { useAppContext } from '../context/AppContext';
 import SkeletonCard from '../components/SkeletonCard';
 import ErrorState from '../components/ErrorState';
 
 const WeekPlanView = () => {
-    const { showToast } = useAppContext();
     const [referenceDate, setReferenceDate] = useState(new Date());
     const [state, setState] = useState({ loading: true, sessions: [], source: null, week: null, error: null });
 
@@ -72,15 +70,6 @@ const WeekPlanView = () => {
         const planned = days.filter(day => day.session).length;
         const completed = days.filter(day => day.session?.status === 'done').length;
 
-        const onOpenInChat = () => {
-            showToast({
-                title: 'Открыть в чате',
-                message: 'Нажми кнопку «План» в чате, чтобы получить полную версию.',
-                type: 'info',
-            });
-            window.Telegram?.WebApp?.close();
-        };
-
         return (
             <>
                 <div className="week-calendar">
@@ -113,11 +102,8 @@ const WeekPlanView = () => {
                     </div>
                     <div className="stat-item">
                         <span className="stat-label">Источник</span>
-                        <span className="stat-value">{state.source === 'fallback' ? 'базовый план' : 'Supabase'}</span>
+                        <span className="stat-value">Личный план</span>
                     </div>
-                    <button className="btn btn-secondary" onClick={onOpenInChat}>
-                        Открыть в чате
-                    </button>
                 </div>
             </>
         );

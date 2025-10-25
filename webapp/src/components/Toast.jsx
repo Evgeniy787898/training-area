@@ -22,9 +22,6 @@ const Toast = ({ toast, onClose }) => {
             <div className="toast-content">
                 <p className="toast-title">{toast.title}</p>
                 {toast.message && <p className="toast-message">{toast.message}</p>}
-                {toast.traceId && (
-                    <p className="toast-trace">trace-id: {toast.traceId}</p>
-                )}
             </div>
             <button className="toast-close" onClick={() => onClose(toast.id)} aria-label="Закрыть уведомление">
                 ×

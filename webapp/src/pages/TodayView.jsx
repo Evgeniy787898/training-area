@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { format } from 'date-fns';
+import { addDays, format, formatISO } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { apiClient } from '../api/client';
 import { useAppContext } from '../context/AppContext';
@@ -13,8 +13,8 @@ const TodayView = () => {
     const loadSession = useCallback(async () => {
         setState(prev => ({ ...prev, loading: true, error: null }));
         try {
-            const { data, traceId } = await apiClient.getTodaySession();
-            setState({ loading: false, session: data.session, source: data.source, error: null, traceId });
+            const { data } = await apiClient.getTodaySession();
+            setState({ loading: false, session: data.session, source: data.source, error: null });
         } catch (error) {
             setState({ loading: false, session: null, source: null, error });
         }
@@ -48,17 +48,32 @@ const TodayView = () => {
                 title: 'Не удалось обновить тренировку',
                 message: error.message,
                 type: 'error',
-                traceId: error.traceId,
             });
         }
     };
 
-    const handleReschedule = () => {
-        showToast({
-            title: 'Перенос тренировки',
-            message: 'Для переноса напиши в чат «Перенеси тренировку на завтра».',
-            type: 'info',
-        });
+    const handleReschedule = async () => {
+        if (!state.session?.id) {
+            showToast({ title: 'Нет активной тренировки', type: 'error' });
+            return;
+        }
+
+        try {
+            const nextDate = formatISO(addDays(new Date(state.session.date), 1), { representation: 'date' });
+            await apiClient.rescheduleSession(state.session.id, nextDate);
+            showToast({
+                title: 'Тренировка перенесена',
+                message: 'План обновлён — проверь расписание на завтра.',
+                type: 'info',
+            });
+            await Promise.all([loadSession(), refreshProfile?.()]);
+        } catch (error) {
+            showToast({
+                title: 'Не удалось перенести тренировку',
+                message: error.message,
+                type: 'error',
+            });
+        }
     };
 
     if (state.loading) {
@@ -92,8 +107,8 @@ const TodayView = () => {
                     <p className="text-muted">
                         План на сегодня пуст — используй время для лёгкой мобилизации или прогулки.
                     </p>
-                    <button className="btn btn-primary" onClick={() => window.Telegram?.WebApp?.close()}>
-                        Вернуться в чат
+                    <button className="btn btn-secondary" onClick={refreshProfile}>
+                        Обновить план
                     </button>
                 </div>
             </div>
@@ -115,7 +130,7 @@ const TodayView = () => {
                 </div>
 
                 <p className="text-muted source-label">
-                    Источник данных: {state.source === 'fallback' ? 'базовый план' : 'Supabase'}
+                    Источник данных: личный тренировочный план
                 </p>
 
                 <div className="exercises-list">
@@ -149,7 +164,7 @@ const TodayView = () => {
             <div className="tips-card">
                 <h4>💡 Совет дня</h4>
                 <p>
-                    Отмечай заметки после тренировки — это помогает боту адаптировать план и держать прогрессию под контролем.
+                    Отмечай заметки после тренировки — это поможет видеть тенденции и вовремя корректировать нагрузку.
                 </p>
             </div>
         </div>
