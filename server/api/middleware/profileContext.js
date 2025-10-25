@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'node:crypto';
 import { config } from '../../config/env.js';
 import { db } from '../../infrastructure/supabase.js';
+import { verifyTelegramInitData } from '../../utils/telegram.js';
 
 function unauthorized(res, message = 'Authentication required') {
     return res.status(401).json({ error: 'auth_required', message });
@@ -17,9 +18,20 @@ async function resolveProfile(req) {
         return db.getProfileById(profileIdHeader.trim());
     }
 
+    const overrideTelegramId = req.telegramId;
+    if (overrideTelegramId) {
+        const numericId = Number(overrideTelegramId);
+        if (!Number.isNaN(numericId)) {
+            return db.getProfileByTelegramId(numericId);
+        }
+    }
+
     const telegramIdHeader = req.header('x-telegram-id');
     if (telegramIdHeader) {
-        return db.getProfileByTelegramId(Number(telegramIdHeader));
+        const numericId = Number(telegramIdHeader);
+        if (!Number.isNaN(numericId)) {
+            return db.getProfileByTelegramId(numericId);
+        }
     }
 
     return null;
@@ -50,6 +62,40 @@ export async function profileContextMiddleware(req, res, next) {
     const authToken = req.header('authorization')?.replace('Bearer ', '') || req.header('x-auth-token');
     const tokenPayload = verifyAuthToken(authToken);
 
+    const initDataRaw = req.header('x-telegram-init-data');
+    if (initDataRaw) {
+        const verification = verifyTelegramInitData(initDataRaw, config.telegram.botToken, { maxAgeSeconds: 3600 });
+
+        if (!verification.valid) {
+            return res.status(401).json({
+                error: 'invalid_signature',
+                message: 'Не удалось подтвердить подпись Telegram WebApp.',
+                reason: verification.reason,
+                trace_id: traceId,
+            });
+        }
+
+        if (verification.user?.id) {
+            req.telegramId = verification.user.id;
+            req.telegramUser = verification.user;
+        }
+
+        const headerTelegramId = req.header('x-telegram-id');
+        if (headerTelegramId) {
+            const headerId = Number(headerTelegramId);
+            const verifiedId = Number(req.telegramId);
+            if (!Number.isNaN(headerId) && !Number.isNaN(verifiedId) && headerId !== verifiedId) {
+                return res.status(403).json({
+                    error: 'forbidden',
+                    message: 'Идентификатор Telegram не совпадает с подписью.',
+                    trace_id: traceId,
+                });
+            }
+        }
+
+        req.telegramAuthDate = verification.authDate;
+    }
+
     let profile = null;
 
     try {
@@ -61,6 +107,13 @@ export async function profileContextMiddleware(req, res, next) {
 
     if (!profile) {
         return unauthorized(res, 'Профиль не найден. Откройте WebApp из чата бота.');
+    }
+
+    if (config.telegram.allowedUserIds?.length) {
+        const candidateId = req.telegramId ?? profile.telegram_id;
+        if (!candidateId || !config.telegram.allowedUserIds.includes(String(candidateId))) {
+            return forbidden(res, 'Доступ к этому окружению ограничен.');
+        }
     }
 
     if (tokenPayload && tokenPayload.profile_id && tokenPayload.profile_id !== profile.id) {

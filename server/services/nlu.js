@@ -25,6 +25,11 @@ const INTENT_PATTERNS = [
         priority: 60,
     },
     {
+        intent: 'plan.setup',
+        keywords: [/(настро|обнови|подстрои)/i, /(план|цель|оборуд)/i],
+        priority: 65,
+    },
+    {
         intent: 'schedule.reschedule',
         keywords: [/(перенес|перестав|завтра|позже)/i],
         priority: 90,

@@ -1,3 +1,4 @@
+import config from '../../config/env.js';
 import { db } from '../../infrastructure/supabase.js';
 import { recordUserMessage } from '../utils/chat.js';
 
@@ -11,6 +12,13 @@ export async function authMiddleware(ctx, next) {
 
         if (!telegramId) {
             console.error('No telegram ID in context');
+            return;
+        }
+
+        if (config.telegram.allowedUserIds?.length &&
+            !config.telegram.allowedUserIds.includes(String(telegramId))) {
+            console.warn(`Rejected unauthorized Telegram ID ${telegramId}`);
+            await ctx.reply('Доступ к этому боту ограничен. Если нужен доступ — свяжись с разработчиком.');
             return;
         }
 
@@ -200,4 +208,3 @@ export default {
     errorMiddleware,
     dialogStateMiddleware,
 };
-

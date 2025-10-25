@@ -1,9 +1,5 @@
-import OpenAI from 'openai';
+import openai from './openaiClient.js';
 import config from '../config/env.js';
-
-const openai = new OpenAI({
-    apiKey: config.openai.apiKey,
-});
 
 // Системный промпт тренера
 const SYSTEM_PROMPT = `Ты — виртуальный тренер по функциональному тренингу и калистенике. 
@@ -49,7 +45,7 @@ export class PlannerService {
 
         try {
             const completion = await openai.chat.completions.create({
-                model: 'gpt-4',
+                model: config.openai.model,
                 messages: [
                     { role: 'system', content: SYSTEM_PROMPT },
                     { role: 'user', content: userPrompt },
@@ -82,7 +78,7 @@ export class PlannerService {
 
         try {
             const completion = await openai.chat.completions.create({
-                model: 'gpt-4',
+                model: config.openai.model,
                 messages: [
                     { role: 'system', content: SYSTEM_PROMPT },
                     { role: 'user', content: analysisPrompt },
@@ -117,7 +113,7 @@ export class PlannerService {
 
         try {
             const completion = await openai.chat.completions.create({
-                model: 'gpt-4',
+                model: config.openai.model,
                 messages: [
                     { role: 'system', content: SYSTEM_PROMPT },
                     { role: 'user', content: prompt },
@@ -260,4 +256,3 @@ export class PlannerService {
 }
 
 export default new PlannerService();
-

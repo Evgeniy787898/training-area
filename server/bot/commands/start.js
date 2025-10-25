@@ -1,9 +1,10 @@
+import { Markup } from 'telegraf';
 import { addDays, format, startOfWeek } from 'date-fns';
 import { db } from '../../infrastructure/supabase.js';
 import { beginChatResponse, replyWithTracking } from '../utils/chat.js';
 import { buildDefaultWeekPlan } from '../../services/staticPlan.js';
-import { buildMainMenuKeyboard } from '../utils/menu.js';
-import { startOnboarding } from './onboarding.js';
+import { buildMainMenuKeyboard, mainMenuCallbackId } from '../utils/menu.js';
+import config from '../../config/env.js';
 
 const PLAN_CACHE_STATE = 'ui_cached_plan';
 
@@ -13,14 +14,8 @@ const PLAN_CACHE_STATE = 'ui_cached_plan';
 export async function startCommand(ctx, options = {}) {
     const profile = ctx.state.profile;
     const profileId = ctx.state.profileId;
-    const firstName = ctx.from?.first_name || 'друг';
 
     const onboardingCompleted = profile?.preferences?.onboarding_status === 'completed';
-
-    if (!options.skipOnboarding && !onboardingCompleted) {
-        await startOnboarding(ctx);
-        return;
-    }
 
     await beginChatResponse(ctx);
 
@@ -31,18 +26,43 @@ export async function startCommand(ctx, options = {}) {
         : '';
 
     const frequency = profile?.preferences?.training_frequency || 4;
-    const message =
-        `${introSummary}` +
-        `Привет, ${firstName}! 👟 Я уже готов помочь.\n\n` +
-        `📅 План на неделю собран по базовой программе и учитывает ${frequency} тренировки.\n` +
-        `📝 Можешь сразу отправить отчёт — подскажу, как скорректировать нагрузку.\n` +
-        `📊 Отслеживаю прогрессию упражнений и серию тренировок.\n\n` +
-        `Выбирай действие на клавиатуре или открывай WebApp, если нужны детали.`;
+    const messageParts = [
+        introSummary,
+        'Главное меню готово 👇',
+        `• 📅 План на неделю — команда /plan или кнопка «План на сегодня» (учитываю ${frequency} тренировки).`,
+        '• 📝 Отправь отчёт — /report или кнопка «Отчёт о тренировке».',
+        '• 📊 Прогресс и уровни упражнений — смотри в разделе «Прогресс» и «Упражнения».',
+    ].filter(Boolean);
+
+    if (!onboardingCompleted) {
+        messageParts.push(
+            'ℹ️ Сейчас использую базовый план. Захочешь подстроить цели и оборудование — вызови /setup или напиши «Настроить план».'
+        );
+    }
+
+    if (config.app.webAppUrl) {
+        messageParts.push('🚀 Нужна детализация? Жми «Открыть панель» и работай прямо внутри Telegram.');
+    } else {
+        messageParts.push('Выбирай действие на клавиатуре — /menu вернёт кнопки, если они спрячутся.');
+    }
+
+    const message = messageParts.join('\n\n');
 
     await replyWithTracking(ctx, message, {
         parse_mode: 'Markdown',
         ...buildMainMenuKeyboard(),
     });
+
+    if (config.app.webAppUrl) {
+        await replyWithTracking(
+            ctx,
+            '🚀 Открыть WebApp прямо в Telegram',
+            Markup.inlineKeyboard([
+                [Markup.button.webApp('Открыть панель', config.app.webAppUrl)],
+                [Markup.button.callback('↩️ Главное меню', mainMenuCallbackId())],
+            ])
+        );
+    }
 }
 
 async function ensureWeeklyPlan(profile, profileId) {

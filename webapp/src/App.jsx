@@ -6,11 +6,14 @@ import ReportView from './pages/ReportView';
 import ProgressView from './pages/ProgressView';
 import SettingsView from './pages/SettingsView';
 import ExercisesView from './pages/ExercisesView';
+import LibraryView from './pages/LibraryView';
 import SkeletonCard from './components/SkeletonCard';
 import ErrorState from './components/ErrorState';
 import Toast from './components/Toast';
 import { AppProvider } from './context/AppContext';
 import { configureClient, apiClient } from './api/client';
+
+const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME || null;
 
 function App() {
     const [activeTab, setActiveTab] = useState('today');
@@ -25,7 +28,10 @@ function App() {
         const tg = window.Telegram?.WebApp;
 
         if (!tg) {
-            setProfileError(new Error('Запустите WebApp внутри Telegram'));
+            setProfileError({
+                code: 'telegram_webapp_required',
+                message: 'Запустите WebApp внутри Telegram',
+            });
             setProfileLoading(false);
             return;
         }
@@ -35,7 +41,7 @@ function App() {
 
         const user = tg.initDataUnsafe?.user || null;
         setTelegramUser(user);
-        configureClient({ telegramUser: user });
+        configureClient({ telegramUser: user, initData: tg.initData || '' });
     }, []);
 
     const pushToast = useCallback(({ title, message, type = 'info', traceId }) => {
@@ -79,6 +85,37 @@ function App() {
         }
     }, [telegramUser, loadProfile]);
 
+    if (!profileLoading && profileError?.code === 'telegram_webapp_required') {
+        return (
+            <div className="standalone-app">
+                <div className="standalone-card">
+                    <h1>🏋️ Training Bot</h1>
+                    <p>
+                        Telegram WebApp работает только внутри клиента Telegram. Открой чат с ботом и нажми кнопку «Открыть панель».
+                    </p>
+                    <ol>
+                        <li>Найди бота в Telegram и отправь команду <code>/menu</code>.</li>
+                        <li>Нажми кнопку «Открыть панель» в появившемся меню.</li>
+                        <li>Внутри WebApp доступны план, отчёты и прогресс.</li>
+                    </ol>
+                    {TELEGRAM_BOT_USERNAME && (
+                        <a
+                            className="btn btn-primary"
+                            href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=webapp`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            Открыть @{TELEGRAM_BOT_USERNAME}
+                        </a>
+                    )}
+                    <p className="text-muted">
+                        Если кнопка не появилась, обнови чат или напиши боту «Открыть WebApp».
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
     const renderView = () => {
         switch (activeTab) {
             case 'today':
@@ -91,6 +128,8 @@ function App() {
                 return <ProgressView />;
             case 'exercises':
                 return <ExercisesView />;
+            case 'library':
+                return <LibraryView />;
             case 'settings':
                 return <SettingsView />;
             default:

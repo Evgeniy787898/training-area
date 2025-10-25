@@ -57,6 +57,10 @@ TELEGRAM_BOT_TOKEN=your_token
 
 # OpenAI API Key
 OPENAI_API_KEY=sk-proj-your_key
+# (optional) модель OpenAI, по умолчанию gpt-4o-mini
+OPENAI_MODEL=gpt-4o-mini
+# (optional) ограничьте доступ конкретными аккаунтами
+TELEGRAM_ALLOWED_IDS=123456789,987654321
 
 # Supabase
 SUPABASE_URL=https://your-project.supabase.co
@@ -87,6 +91,7 @@ npm start
 | `/start` | Начало работы и онбординг |
 | `/help` | Справка по возможностям |
 | `/plan` | Показать план тренировок |
+| `/setup` | Перезапустить настройки целей и оборудования |
 | `/report` | Отчитаться о тренировке |
 | `/stats` | Посмотреть прогресс |
 | `/settings` | Настройки уведомлений |
@@ -106,15 +111,19 @@ Telegram → Bot → Middleware → Command Handler → Service → Supabase
 
 1. **errorMiddleware** — глобальная обработка ошибок
 2. **loggingMiddleware** — логирование всех действий
-3. **authMiddleware** — создание/проверка профиля
+3. **authMiddleware** — создание/проверка профиля и фильтр по `TELEGRAM_ALLOWED_IDS`
 4. **dialogStateMiddleware** — управление состоянием диалога
 
 ### Сервисы
 
 #### PlannerService (`services/planner.js`)
-- Генерация тренировочных планов через OpenAI GPT-4
+- Генерация тренировочных планов через OpenAI (по умолчанию gpt-4o-mini)
 - Анализ отчётов о тренировках
 - Мотивационные сообщения
+
+#### ConversationService (`services/conversation.js`)
+- Ответы на свободный текст с помощью OpenAI
+- Используется как fallback, когда правило-интент не найден
 
 #### ProgressionService (`services/progression.js`)
 - Расчёт прогрессий упражнений
@@ -126,6 +135,7 @@ Telegram → Bot → Middleware → Command Handler → Service → Supabase
 - Каталог упражнений для WebApp и fallback-планов
 
 HTTP API дополняется маршрутом `/v1/exercises/*`, который отдаёт каталог прогрессий и историю выполнения.
+Для запросов из WebApp необходимо передавать заголовок `X-Telegram-Init-Data` — подпись проверяется в middleware.
 
 ### База данных
 
@@ -279,8 +289,8 @@ console.log('Generated plan:', result);
 ## Конфигурация OpenAI
 
 ### Модели
-- **Рекомендуется**: `gpt-4` (лучшее качество)
-- **Альтернатива**: `gpt-3.5-turbo` (дешевле, но ниже качество)
+- **По умолчанию**: `gpt-4o-mini` — баланс качества и стоимости, поддерживает быстрые ответы
+- **Альтернативы**: `gpt-4o`, `gpt-4-turbo`, `gpt-3.5-turbo` и другие совместимые модели (переопределите через `OPENAI_MODEL`)
 
 ### Лимиты
 - Троттлинг: 1 запрос/сек
@@ -288,8 +298,8 @@ console.log('Generated plan:', result);
 - Retry: 3 попытки с экспоненциальной задержкой
 
 ### Стоимость (примерная)
-- GPT-4: ~$0.03 за запрос (генерация плана)
-- Месячный расчёт: 30 планов × $0.03 = ~$1/месяц на пользователя
+- gpt-4o-mini: ≈$0.0006 за генерацию плана (~4K токенов)
+- Месячный расчёт: 30 планов × $0.0006 ≈ $0.02 на пользователя
 
 ## Безопасность
 
@@ -328,4 +338,3 @@ console.log('Generated plan:', result);
 ## Поддержка
 
 Вопросы и проблемы: [GitHub Issues](https://github.com/your-repo/issues)
-

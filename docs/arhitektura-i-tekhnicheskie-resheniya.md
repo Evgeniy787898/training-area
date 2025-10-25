@@ -36,9 +36,9 @@ root
    │  ├─ middleware/
    │  │  └─ auth.ts      // проверка Telegram ID
    │  ├─ services/
-   │  │  ├─ planner.ts   // запросы к ChatGPT
-   │  │  └─ formatter.ts // сборка сообщений
-   │  └─ scenes/         // wizard-сценарии опросов
+   │  │  ├─ planner.ts   // генерация планов и анализ отчётов
+   │  │  ├─ progression.ts // решение по прогрессиям
+   │  │  └─ conversation.ts // fallback-ответы на свободный текст
    ├─ supabase/
    │  ├─ schemas.sql     // миграции таблиц
    │  └─ functions/
@@ -158,7 +158,7 @@ root
 5. По воскресеньям бот собирает данные недели, формирует обзор и отправляет в Telegram.
 
 ## Безопасность и секреты
-- Переменные окружения: `OPENAI_API_KEY`, `TELEGRAM_BOT_TOKEN`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_KEY`, `LOGFLARE_API_KEY`, `ENCRYPTION_SECRET` (для шифрования локальных кэшей).
+- Переменные окружения: `OPENAI_API_KEY`, `OPENAI_MODEL`, `TELEGRAM_BOT_TOKEN`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_KEY`, `LOGFLARE_API_KEY`, `ENCRYPTION_SECRET` (для шифрования локальных кэшей).
 - Хранить ключи в `.env` и не коммитить в репозиторий. Для CI использовать секреты GitHub Actions (`Settings → Secrets → Actions`).
 - Доступ к боту ограничен проверкой Telegram ID + проверкой подписи `hash` в стартовом payload.
 - Edge Functions выполняют роль-based access policies: только `service_role` может обновлять `profiles`, все публичные запросы идут через row level security.
@@ -196,4 +196,3 @@ root
 4. Реализовать бота и edge functions с учётом политики идемпотентности.
 5. Провести интеграционное тестирование на тестовом чате и WebApp (прогнать сценарии «перенос», «отчёт», «аналитика»).
 6. Перенести бота на постоянный хостинг, включить ежедневные задачи и настроить оповещения Grafana/Telegram.
-

@@ -1,7 +1,7 @@
 import { Markup } from 'telegraf';
 import { db } from '../../infrastructure/supabase.js';
 import { beginChatResponse, replyWithTracking } from '../utils/chat.js';
-import { buildMainMenuKeyboard, withMainMenuButton } from '../utils/menu.js';
+import { withMainMenuButton } from '../utils/menu.js';
 
 const EQUIPMENT_OPTIONS = [
     { key: 'bodyweight', label: 'Только вес тела', icon: '🧘' },

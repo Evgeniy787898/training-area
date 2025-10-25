@@ -8,7 +8,7 @@ import ErrorState from '../components/ErrorState';
 import { buildStaticPlan } from '../services/staticPlan';
 
 const WeekPlanView = () => {
-    const { showToast } = useAppContext();
+    const { showToast, setActiveTab } = useAppContext();
     const [referenceDate, setReferenceDate] = useState(new Date());
     const [state, setState] = useState({ loading: true, sessions: [], source: null, week: null, error: null, fallback: false });
 
@@ -101,6 +101,15 @@ const WeekPlanView = () => {
             window.Telegram?.WebApp?.close();
         };
 
+        const handleGoToday = () => {
+            setActiveTab?.('today');
+            showToast({
+                title: 'План на сегодня',
+                message: 'Открыл детальную карточку дня.',
+                type: 'info',
+            });
+        };
+
         return (
             <>
                 <div className="week-calendar">
@@ -135,9 +144,14 @@ const WeekPlanView = () => {
                         <span className="stat-label">Источник</span>
                         <span className="stat-value">{state.fallback ? 'локальный пример' : state.source === 'fallback' ? 'базовый план' : 'Supabase'}</span>
                     </div>
-                    <button className="btn btn-secondary" onClick={onOpenInChat}>
-                        Открыть в чате
-                    </button>
+                    <div className="week-actions">
+                        <button className="btn btn-primary" onClick={handleGoToday}>
+                            Перейти к «Сегодня»
+                        </button>
+                        <button className="btn btn-secondary" onClick={onOpenInChat}>
+                            Открыть в чате
+                        </button>
+                    </div>
                 </div>
             </>
         );

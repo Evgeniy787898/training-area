@@ -89,6 +89,15 @@ const TodayView = () => {
         });
     };
 
+    const handleOpenLibrary = () => {
+        setActiveTab?.('library');
+        showToast({
+            title: 'Информационный стенд',
+            message: 'Открыл подборку советов по тренировкам и восстановлению.',
+            type: 'info',
+        });
+    };
+
     if (state.loading) {
         return (
             <div className="view today-view">
@@ -173,6 +182,9 @@ const TodayView = () => {
                     </button>
                     <button className="btn btn-secondary" onClick={handleOpenExercises}>
                         📚 Прогрессии
+                    </button>
+                    <button className="btn btn-secondary" onClick={handleOpenLibrary}>
+                        🧠 Советы
                     </button>
                 </div>
             </div>

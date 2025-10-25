@@ -7,6 +7,7 @@ const Navigation = ({ activeTab, onTabChange }) => {
         { id: 'report', label: 'Отчёт', icon: '📝' },
         { id: 'progress', label: 'Прогресс', icon: '📊' },
         { id: 'exercises', label: 'Упражнения', icon: '🏋️' },
+        { id: 'library', label: 'Справка', icon: '🧠' },
         { id: 'settings', label: 'Настройки', icon: '⚙️' },
     ];
 
@@ -28,4 +29,3 @@ const Navigation = ({ activeTab, onTabChange }) => {
 };
 
 export default Navigation;
-

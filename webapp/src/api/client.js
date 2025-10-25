@@ -1,9 +1,11 @@
 const DEFAULT_BASE_URL = import.meta.env.VITE_API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
 
 let telegramId = null;
+let telegramInitData = null;
 
-export function configureClient({ telegramUser }) {
+export function configureClient({ telegramUser, initData }) {
     telegramId = telegramUser?.id || null;
+    telegramInitData = initData || (typeof window !== 'undefined' ? window.Telegram?.WebApp?.initData || null : null);
 }
 
 async function request(path, { method = 'GET', body, headers } = {}) {
@@ -12,6 +14,10 @@ async function request(path, { method = 'GET', body, headers } = {}) {
 
     if (telegramId) {
         init.headers.set('X-Telegram-Id', telegramId);
+    }
+
+    if (telegramInitData) {
+        init.headers.set('X-Telegram-Init-Data', telegramInitData);
     }
 
     if (body !== undefined) {

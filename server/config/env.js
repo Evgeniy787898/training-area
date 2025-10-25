@@ -6,9 +6,14 @@ export const config = {
     telegram: {
         botToken: process.env.TELEGRAM_BOT_TOKEN,
         webhookUrl: process.env.TELEGRAM_WEBHOOK_URL,
+        allowedUserIds: (process.env.TELEGRAM_ALLOWED_IDS || '')
+            .split(',')
+            .map(value => value.trim())
+            .filter(Boolean),
     },
     openai: {
         apiKey: process.env.OPENAI_API_KEY,
+        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
     },
     supabase: {
         url: process.env.SUPABASE_URL,
@@ -43,4 +48,3 @@ for (const varName of requiredVars) {
 }
 
 export default config;
-

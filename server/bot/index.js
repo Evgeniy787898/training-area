@@ -9,6 +9,7 @@ import {
 } from './middleware/auth.js';
 import { detectIntent } from '../services/nlu.js';
 import plannerService from '../services/planner.js';
+import conversationService from '../services/conversation.js';
 import { db } from '../infrastructure/supabase.js';
 
 // Import commands
@@ -39,12 +40,14 @@ import {
     rescheduleCancelCallback,
     startNaturalRescheduleFlow
 } from './commands/reschedule.js';
-import { mainMenuCallbackId } from './utils/menu.js';
+import { replyWithTracking } from './utils/chat.js';
+import { mainMenuCallbackId, withMainMenuButton } from './utils/menu.js';
 import {
     handleGoalSelection,
     handleEquipmentToggle,
     handleEquipmentComplete,
     handleFrequencySelection,
+    startOnboarding,
     completeOnboarding,
 } from './commands/onboarding.js';
 
@@ -67,6 +70,7 @@ bot.command('report', reportCommand);
 bot.command('stats', statsCommand);
 bot.command('settings', settingsCommand);
 bot.command('menu', startCommand);
+bot.command('setup', startOnboarding);
 
 // Register callback queries (inline buttons)
 
@@ -165,6 +169,9 @@ bot.on('text', async (ctx, next) => {
             case 'plan.week':
                 await planCommand(ctx);
                 break;
+            case 'plan.setup':
+                await startOnboarding(ctx);
+                break;
             case 'report.start':
                 await reportCommand(ctx);
                 break;
@@ -190,10 +197,31 @@ bot.on('text', async (ctx, next) => {
                 await helpCommand(ctx);
                 break;
             default:
-                await ctx.reply(
-                    '🤔 Я ещё учусь понимать свободный текст.\n\n' +
-                    'Попробуй сформулировать запрос иначе или воспользуйся командой /help.'
-                );
+                try {
+                    const aiReply = await conversationService.generateReply({
+                        profile: ctx.state.profile,
+                        message: text,
+                    });
+
+                    if (aiReply) {
+                        await ctx.reply(aiReply);
+                    } else {
+                        await replyWithTracking(
+                            ctx,
+                            '🤔 Пока не распознал запрос.\n\n' +
+                            'Выбери действие на клавиатуре или открой WebApp кнопкой ниже — там всегда доступен план, прогресс и отчёты.',
+                            withMainMenuButton()
+                        );
+                    }
+                } catch (error) {
+                    console.error('Fallback AI reply failed:', error);
+                    await replyWithTracking(
+                        ctx,
+                        '🤔 Пока не распознал запрос.\n\n' +
+                        'Выбери действие на клавиатуре или открой WebApp кнопкой ниже — там всегда доступен план, прогресс и отчёты.',
+                        withMainMenuButton()
+                    );
+                }
                 break;
         }
     }
