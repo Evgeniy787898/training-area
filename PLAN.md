@@ -1,6 +1,6 @@
 # Поэтапный план запуска тренировочного бота
 
-Документация-источник: [Концепция и работа бота](docs/kontseptsiya-i-rabota-bota.md), [Архитектура и технические решения](docs/arhitektura-i-tekhnicheskie-resheniya.md), [Правила ИИ и диалога](docs/pravila-ii-i-dialoga.md), [Диалоговая логика и UX чата](docs/dialogovaya-logika-i-ux-chata.md), [Логика прогрессии](docs/logika-progressii-i-ii.md), [Тренировочные программы](docs/trenirovochnye-programmy-i-progressii.md), [Telegram WebApp UI/UX спецификация](docs/telegram-webapp-ui-ux-specifikatsiya.md).
+Документация-источник: [Концепция и работа бота](docs/kontseptsiya-i-rabota-bota.md), [Архитектура и технические решения](docs/arhitektura-i-tekhnicheskie-resheniya.md), [Правила ИИ и диалога](docs/pravila-ii-i-dialoga.md), [Диалоговая логика и UX чата](docs/dialogovaya-logika-i-ux-chata.md), [Внутренний движок ассистента](docs/vnutrenniy-assistent-dvizhok.md), [Тренировочные программы](docs/trenirovochnye-programmy-i-progressii.md), [Telegram WebApp UI/UX спецификация](docs/telegram-webapp-ui-ux-specifikatsiya.md).
 
 ## Шаг 0. Утверждение концепции и рамок
 **Цель:** у всей команды единое понимание задачи, ограничения зафиксированы письменно.
@@ -112,7 +112,7 @@
 **Цель:** персонализированные тренировочные планы с возможностью адаптации.
 
 1. Шаблоны тренировок:
-   - на базе [логики прогрессии](docs/logika-progressii-i-ii.md) сформировать библиотеку микроциклов (подготовка, прогрессия, разгрузка);
+   - на базе [логики движка](docs/vnutrenniy-assistent-dvizhok.md) сформировать библиотеку микроциклов (подготовка, прогрессия, разгрузка);
    - оформить JSON-шаблоны с параметрами (уровень, оборудование, ограничения);
    - провести ревью с методистом.
 2. Алгоритм адаптаций:

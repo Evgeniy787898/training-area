@@ -2,11 +2,12 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { db } from '../../infrastructure/supabase.js';
 import config from '../../config/env.js';
-import { getProviderCatalog, resolveProvider } from '../../services/llmGateway.js';
+import internalAssistantEngine from '../../services/internalAssistantEngine.js';
 
 const router = Router();
 
-const allowedAiProviders = config.ai.allowedProviders;
+const ENGINE_ID = config.assistant.engineId || 'internal';
+const allowedProviders = [ENGINE_ID];
 
 const preferencesSchema = z.object({
     notification_time: z.string().regex(/^\d{2}:\d{2}$/).optional(),
@@ -15,7 +16,7 @@ const preferencesSchema = z.object({
     ai_provider: z.string()
         .trim()
         .toLowerCase()
-        .refine(value => !value || allowedAiProviders.includes(value), 'Недоступный AI-провайдер')
+        .refine(value => !value || allowedProviders.includes(value), 'Недоступный движок ассистента')
         .optional(),
 });
 
@@ -24,8 +25,11 @@ router.get('/summary', async (req, res, next) => {
         const profile = req.profile;
         const adherence = await db.getAdherenceSummary(req.profileId);
         const latestMetrics = await db.getLatestMetrics(req.profileId);
-        const providerCatalog = getProviderCatalog();
-        const resolvedProvider = resolveProvider({ profile }).provider;
+        const providerCatalog = internalAssistantEngine.getEngineCatalog({
+            successThreshold: config.assistant.successThreshold,
+            slumpThreshold: config.assistant.slumpThreshold,
+        });
+        const resolvedProvider = internalAssistantEngine.resolveEngine({ profile });
 
         res.json({
             profile: {

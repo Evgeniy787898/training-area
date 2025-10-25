@@ -1,5 +1,8 @@
 const GREETING_REGEX = /\b(привет|здравствуй|добрый|доброе|хай|hello|hi)\b/i;
 const THANKS_REGEX = /\b(спасибо|благодарю|thx|thanks)\b/i;
+const SUCCESS_REGEX = /(выполнил|сделал|закрыл|успел|готово|done|finish)/i;
+const MISS_REGEX = /(не сделал|не успел|пропустил|сорвал|провал|fail)/i;
+const FATIGUE_REGEX = /(устал|разбит|тяжел|тяжёл|не вывез|нет сил|перегорел)/i;
 const ABILITY_REGEX = /(что|какие)\s+(ты\s+)?(умеешь|можешь|делаешь|функции|возможности)/i;
 const HELP_REGEX = /\b(помощь|help|команд|что ты умеешь|как пользоваться)\b/i;
 const CALISTHENICS_REGEX = /калистеник/i;
@@ -53,12 +56,13 @@ const TOPIC_SNIPPETS = [
 
 export function buildLocalReply({ message, profile, history = [] } = {}) {
     const normalized = (message || '').trim();
+    const tone = determineGreetingTone({ message: normalized, profile, history });
     if (!normalized) {
         return genericReply({ profile, message: normalized });
     }
 
     if (GREETING_REGEX.test(normalized)) {
-        return greetingReply({ profile, history });
+        return greetingReply({ profile, history, tone });
     }
 
     if (THANKS_REGEX.test(normalized)) {
@@ -81,25 +85,36 @@ export function buildLocalReply({ message, profile, history = [] } = {}) {
     return genericReply({ profile, message: normalized });
 }
 
-function greetingReply({ profile, history }) {
+function greetingReply({ profile, history, tone }) {
     const lastAssistant = [...history].reverse().find(item => item.role === 'assistant');
     const todaysFocus = extractLastPlanFocus(lastAssistant);
-    const salutation = 'Привет! Рад снова видеть твоё сообщение.';
-
-    if (todaysFocus) {
-        return [
-            salutation,
-            `План по-прежнему держит курс на «${todaysFocus}». Если нужно скорректировать — скажи, и мы адаптируем блок.`,
-            'Могу подсказать по технике, восстановлению или собрать новую сессию — просто сформулируй задачу.',
-        ].join('\n');
-    }
-
     const frequency = resolveFrequency(profile);
-    return [
-        salutation,
-        frequency ? `Мы по-прежнему держим ${frequency} — отличный ритм.` : 'Готов подстроить план под твои цели.',
-        'Спрашивай про тренировки, питание, восстановление или просто расскажи, как чувствуешь себя — продолжим с учётом контекста.',
-    ].join('\n');
+
+    const templates = {
+        success: [
+            'Привет! Отлично справился с последними тренировками — видно прогресс.',
+            frequency ? `Продолжаем держать ${frequency}, можно добавить акцент на технику.` : 'Если хочешь усилить план — просто скажи.',
+            todaysFocus ? `Сегодня по плану «${todaysFocus}». Готов помочь с тонкостями.` : 'Готов подсказать следующий шаг или адаптацию.',
+        ],
+        slump: [
+            'Привет! Бывает, что ритм сбивается — ничего страшного.',
+            frequency ? `Вернёмся к ${frequency}, но мягко: начнём с разминки и лёгкого блока.` : 'Давай начнём с короткой сессии, чтобы поймать темп.',
+            'Сформулируй, что именно сложно — подберём простое действие на сегодня.',
+        ],
+        fatigue: [
+            'Привет! Чувствуется усталость — сделаем акцент на восстановление.',
+            'Предложу дыхание 4-6-4 и лёгкую мобилизацию, чтобы снять напряжение.',
+            'Когда силы вернутся, напиши — подстрою план под комфортный темп.',
+        ],
+        neutral: [
+            'Привет! Рад снова видеть твоё сообщение.',
+            frequency ? `Держим ${frequency} — хороший ритм.` : 'Готов помочь выбрать частоту и цели.',
+            todaysFocus ? `Сегодня в фокусе «${todaysFocus}».` : 'Расскажи, что хочешь обсудить — техника, план или восстановление.',
+        ],
+    };
+
+    const lines = templates[tone] || templates.neutral;
+    return lines.join('\n');
 }
 
 function thanksReply({ profile }) {
@@ -176,6 +191,45 @@ function genericReply({ profile, message }) {
     ]
         .filter(Boolean)
         .join('\n');
+}
+
+function determineGreetingTone({ message, profile, history }) {
+    if (!message) {
+        return 'neutral';
+    }
+    if (FATIGUE_REGEX.test(message)) {
+        return 'fatigue';
+    }
+    if (MISS_REGEX.test(message)) {
+        return 'slump';
+    }
+    if (SUCCESS_REGEX.test(message)) {
+        return 'success';
+    }
+
+    const adherence =
+        profile?.adherence?.adherence_percent ??
+        profile?.metrics?.adherence_percent ??
+        null;
+
+    if (adherence !== null) {
+        const numeric = Number(adherence);
+        if (Number.isFinite(numeric)) {
+            if (numeric >= 75) {
+                return 'success';
+            }
+            if (numeric <= 45) {
+                return 'slump';
+            }
+        }
+    }
+
+    const lastAssistant = [...(history || [])].reverse().find(item => item.role === 'assistant');
+    if (lastAssistant?.content?.includes('⚠️')) {
+        return 'slump';
+    }
+
+    return 'neutral';
 }
 
 function resolveFrequency(profile) {
