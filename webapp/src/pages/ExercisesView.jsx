@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiClient } from '../api/client';
 import { useAppContext } from '../context/AppContext';
 import SkeletonCard from '../components/SkeletonCard';
@@ -6,12 +6,19 @@ import ErrorState from '../components/ErrorState';
 import ExerciseCard from '../components/ExerciseCard';
 import { STATIC_EXERCISE_CATALOG } from '../services/staticCatalog';
 
+const PROGRAMS = [
+    { id: 'calisthenics', title: 'Калистеника', subtitle: 'Турник, собственный вес, мобильность' },
+    { id: 'functional', title: 'Функциональный тренинг', subtitle: 'Скоро', locked: true },
+    { id: 'weights', title: 'Силовые тренировки', subtitle: 'В разработке', locked: true },
+];
+
 const ExercisesView = () => {
     const { showToast } = useAppContext();
     const [catalogState, setCatalogState] = useState({ loading: true, error: null, items: [], fallback: false });
     const [expandedKey, setExpandedKey] = useState(null);
     const [historyMap, setHistoryMap] = useState({});
     const [historyLoading, setHistoryLoading] = useState({});
+    const [activeProgram, setActiveProgram] = useState('calisthenics');
 
     const loadCatalog = useCallback(async () => {
         setCatalogState(prev => ({ ...prev, loading: true, error: null, fallback: false }));
@@ -21,8 +28,8 @@ const ExercisesView = () => {
         } catch (error) {
             setCatalogState({ loading: false, error: null, items: STATIC_EXERCISE_CATALOG, fallback: true });
             showToast({
-                title: 'Показан каталог по умолчанию',
-                message: error.message,
+                title: 'Каталог офлайн',
+                message: 'Показываю встроенные прогрессии, пока нет соединения с сервером.',
                 type: 'warning',
                 traceId: error.traceId,
             });
@@ -65,10 +72,27 @@ const ExercisesView = () => {
         }
     };
 
+    const handleProgramChange = (programId, locked) => {
+        if (locked) {
+            showToast({
+                title: 'Скоро',
+                message: 'Дополнительные программы появятся после запуска основного релиза.',
+                type: 'info',
+            });
+            return;
+        }
+        setActiveProgram(programId);
+        setExpandedKey(null);
+    };
+
+    const filteredExercises = useMemo(() => {
+        return (catalogState.items || []).filter(item => (item.program || 'calisthenics') === activeProgram);
+    }, [catalogState.items, activeProgram]);
+
     if (catalogState.loading) {
         return (
             <div className="view exercises-view">
-                <h2>📚 Каталог прогрессий</h2>
+                <h2>🧱 Прогрессии упражнений</h2>
                 <SkeletonCard lines={5} />
                 <SkeletonCard lines={4} />
             </div>
@@ -78,7 +102,7 @@ const ExercisesView = () => {
     if (catalogState.error && !catalogState.items.length) {
         return (
             <div className="view exercises-view">
-                <h2>📚 Каталог прогрессий</h2>
+                <h2>🧱 Прогрессии упражнений</h2>
                 <ErrorState
                     title="Не удалось загрузить упражнения"
                     message={catalogState.error.message}
@@ -91,32 +115,58 @@ const ExercisesView = () => {
 
     return (
         <div className="view exercises-view">
-            <h2>📚 Каталог прогрессий</h2>
+            <h2>🧱 Прогрессии упражнений</h2>
             <p className="text-muted">
-                Изучи путь развития по каждому направлению калистеники. Нажми на карточку, чтобы увидеть уровни и историю своих тренировок.
-                За общими принципами и шпаргалками загляни в раздел «Справка».
+                Здесь живут уровни и подсказки по технике. Открывай карточки, смотри уровни, отмечай прогресс. Видео и фото подтягиваем из Supabase — в офлайн-режиме показываю шаблон.
             </p>
 
-            <div className="card">
-                <h3>🧭 Как пользоваться прогрессиями</h3>
+            <div className="program-switcher">
+                {PROGRAMS.map(program => (
+                    <button
+                        key={program.id}
+                        className={`program-chip ${activeProgram === program.id ? 'active' : ''} ${program.locked ? 'locked' : ''}`}
+                        onClick={() => handleProgramChange(program.id, program.locked)}
+                    >
+                        <span className="program-title">{program.title}</span>
+                        <span className="program-subtitle">{program.subtitle}</span>
+                    </button>
+                ))}
+            </div>
+
+            <div className="card program-info">
+                <h3>🎯 Текущий фокус — {PROGRAMS.find(program => program.id === activeProgram)?.title}</h3>
                 <p>
-                    Каждое упражнение состоит из последовательности уровней. Выполняй целевой объём легко — переходи к следующему.
-                    Если тяжело, повтори уровень или откати на шаг назад.
+                    Один клик по программе делает её основной. План тренировок, прогрессии и рекомендации будут учитывать выбранный фокус. Остальные программы появятся после релиза — мы уже готовим библиотеку с видео и чек-листами.
                 </p>
-                <ul className="text-muted">
-                    <li>🔥 Уровни с высоким RPE держим дважды подряд, прежде чем усложнять.</li>
-                    <li>🛠️ Появилась боль — переходи на более простой вариант и добавляй технику.</li>
-                    <li>📈 История подтягивается из отчётов /report и отметок в WebApp.</li>
-                </ul>
+                <div className="info-actions">
+                    <button
+                        className="btn btn-secondary"
+                        onClick={() => showToast({
+                            title: 'Добавить своё видео',
+                            message: 'Загрузка собственных медиа появится в одном из ближайших обновлений.',
+                            type: 'info',
+                        })}
+                    >
+                        Добавить своё видео (скоро)
+                    </button>
+                    <button
+                        className="btn btn-secondary"
+                        onClick={() => showToast({
+                            title: 'Новый план',
+                            message: 'Конструктор новых планов пока в разработке — скоро можно будет собирать свои циклы.',
+                            type: 'info',
+                        })}
+                    >
+                        Создать план (в разработке)
+                    </button>
+                </div>
                 {catalogState.fallback && (
-                    <p className="text-muted">
-                        Показаны справочные данные. Для актуальных прогрессий открой WebApp из чата после тренировок.
-                    </p>
+                    <p className="text-muted">Пока показываю демонстрационный каталог. Для синхронизации с Supabase открой WebApp из Telegram.</p>
                 )}
             </div>
 
             <div className="exercise-grid">
-                {catalogState.items.map((exercise) => (
+                {filteredExercises.map(exercise => (
                     <ExerciseCard
                         key={exercise.key}
                         exercise={exercise}

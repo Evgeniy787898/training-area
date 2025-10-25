@@ -50,7 +50,10 @@ async function request(path, { method = 'GET', body, headers } = {}) {
 export const apiClient = {
     getProfileSummary: () => request('/v1/profile/summary'),
     updatePreferences: payload => request('/v1/profile/preferences', { method: 'PATCH', body: payload }),
-    getTodaySession: () => request('/v1/sessions/today'),
+    getTodaySession: (date) => {
+        const suffix = date ? `?date=${encodeURIComponent(date)}` : '';
+        return request(`/v1/sessions/today${suffix}`);
+    },
     getWeekPlan: date => request(`/v1/sessions/week${date ? `?date=${encodeURIComponent(date)}` : ''}`),
     getSession: id => request(`/v1/sessions/${id}`),
     updateSession: (id, payload) => request(`/v1/sessions/${id}`, { method: 'PUT', body: payload }),

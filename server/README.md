@@ -79,6 +79,16 @@ WEBAPP_URL=https://your-webapp-hosting.example
 npm run dev
 ```
 
+### Разработка с туннелем для WebApp
+
+Скрипт запустит WebApp, поднимет ngrok-туннель и пробросит адрес в переменную `WEBAPP_URL`, чтобы кнопка `/webapp` открывала панель.
+
+```bash
+npm run dev:tunnel
+```
+
+Требуется установленный CLI ngrok и авторизация (`ngrok config add-authtoken <TOKEN>`).
+
 ### Продакшн
 ```bash
 npm start
