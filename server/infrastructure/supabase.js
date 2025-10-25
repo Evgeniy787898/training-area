@@ -147,6 +147,93 @@ export const db = {
         return data;
     },
 
+    async getLatestSessionSummary(profileId) {
+        const { data, error } = await supabase
+            .from('training_sessions')
+            .select('id, date, status, session_type, rpe, completed_at')
+            .eq('profile_id', profileId)
+            .order('date', { ascending: false })
+            .limit(1);
+
+        if (error) {
+            console.error('Error fetching latest session summary:', error);
+            throw error;
+        }
+
+        return Array.isArray(data) && data.length ? data[0] : null;
+    },
+
+    async getRecentCompletionStats(profileId, { days = 7 } = {}) {
+        const { data, error } = await supabase
+            .from('training_sessions')
+            .select('status, rpe, date')
+            .eq('profile_id', profileId)
+            .gte('date', format(addDays(new Date(), -days), 'yyyy-MM-dd'));
+
+        if (error) {
+            console.error('Error fetching completion stats:', error);
+            throw error;
+        }
+
+        const summary = {
+            total: 0,
+            completed: 0,
+            skipped: 0,
+            lastStatus: null,
+            lastRpe: null,
+            streak: 0,
+        };
+
+        if (!Array.isArray(data) || data.length === 0) {
+            return summary;
+        }
+
+        const sorted = data.slice().sort((a, b) => new Date(a.date) - new Date(b.date));
+        summary.total = sorted.length;
+
+        let currentStreak = 0;
+        for (const entry of sorted) {
+            if (entry.status === 'done' || entry.status === 'completed') {
+                summary.completed += 1;
+                currentStreak += 1;
+                summary.lastRpe = entry.rpe ?? summary.lastRpe;
+                summary.lastStatus = entry.status;
+            } else if (entry.status === 'skipped' || entry.status === 'missed') {
+                summary.skipped += 1;
+                currentStreak = 0;
+                summary.lastStatus = entry.status;
+            }
+        }
+
+        summary.streak = currentStreak;
+        return summary;
+    },
+
+    async getAiTemplates(category, { tag, limit = 10 } = {}) {
+        let query = supabase
+            .from('ai_templates')
+            .select('*')
+            .eq('category', category)
+            .order('created_at', { ascending: false });
+
+        if (tag) {
+            query = query.eq('tag', tag);
+        }
+
+        if (Number.isFinite(limit)) {
+            query = query.limit(limit);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+            console.error('Error fetching AI templates:', error);
+            throw error;
+        }
+
+        return Array.isArray(data) ? data : [];
+    },
+
     async triggerPlanUpdate(profileId, {
         reason = 'manual',
         referenceDate = new Date(),
@@ -456,6 +543,119 @@ export const db = {
             console.error('Error clearing dialog state:', error);
             throw error;
         }
+    },
+
+    async mergeDialogState(profileId, stateType, updater) {
+        try {
+            const existing = await this.getDialogState(profileId, stateType);
+            const currentPayload = existing?.state_payload ?? {};
+            const nextPayload = typeof updater === 'function'
+                ? updater(currentPayload) ?? currentPayload
+                : { ...currentPayload, ...(updater || {}) };
+
+            return this.saveDialogState(
+                profileId,
+                stateType,
+                nextPayload,
+                existing?.expires_at || null
+            );
+        } catch (error) {
+            console.error('Failed to merge dialog state:', error);
+            throw error;
+        }
+    },
+
+    async saveAssistantNote(profileId, {
+        title = null,
+        content,
+        tags = [],
+        source = 'chat',
+        metadata = {},
+    }) {
+        if (!content || !content.trim()) {
+            throw new Error('Note content is required');
+        }
+
+        const { data, error } = await supabase
+            .from('assistant_notes')
+            .insert({
+                profile_id: profileId,
+                title,
+                content: content.trim(),
+                tags,
+                source,
+                metadata,
+            })
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Error saving assistant note:', error);
+            throw error;
+        }
+
+        return data;
+    },
+
+    async getAssistantNotes(profileId, { limit = 20 } = {}) {
+        const { data, error } = await supabase
+            .from('assistant_notes')
+            .select('*')
+            .eq('profile_id', profileId)
+            .order('created_at', { ascending: false })
+            .limit(limit);
+
+        if (error) {
+            console.error('Error fetching assistant notes:', error);
+            throw error;
+        }
+
+        return Array.isArray(data) ? data : [];
+    },
+
+    async getRecentAssistantNotes(profileId, { limit = 5 } = {}) {
+        return this.getAssistantNotes(profileId, { limit });
+    },
+
+    async findInactiveAssistantChats({
+        thresholdMinutes = 60,
+        limit = 20,
+    } = {}) {
+        const cutoff = new Date(Date.now() - thresholdMinutes * 60 * 1000).toISOString();
+
+        const query = supabase
+            .from('dialog_states')
+            .select('profile_id, state_payload, updated_at, expires_at')
+            .eq('state_type', 'ai_chat_history')
+            .lte('updated_at', cutoff)
+            .order('updated_at', { ascending: true })
+            .limit(limit);
+
+        query.or('state_payload->>session_status.eq.active,state_payload->>session_status.is.null');
+
+        const { data, error } = await query;
+
+        if (error) {
+            console.error('Error fetching inactive chats:', error);
+            throw error;
+        }
+
+        return Array.isArray(data) ? data : [];
+    },
+
+    async markAssistantSessionClosed(profileId, {
+        reason = 'inactivity',
+        closedAt = new Date().toISOString(),
+        summary = null,
+    } = {}) {
+        return this.mergeDialogState(profileId, 'ai_chat_history', (payload) => ({
+            ...payload,
+            session_status: 'closed',
+            closed_at: closedAt,
+            closed_reason: reason,
+            last_session_summary: summary || payload?.last_session_summary || null,
+            messages: [],
+        }));
     },
 
     async getAchievements(profileId, { limit = 5 } = {}) {

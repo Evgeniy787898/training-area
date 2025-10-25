@@ -11,10 +11,8 @@ import aiCommandRouter from '../services/aiCommandRouter.js';
 import conversationService from '../services/conversation.js';
 import { replyWithTracking } from './utils/chat.js';
 import { db } from '../infrastructure/supabase.js';
-
-const CONVERSATION_STATE_KEY = 'ai_chat_history';
-const HISTORY_LIMIT = 12;
-const HISTORY_TTL_MS = 48 * 60 * 60 * 1000; // 48 часов
+import { startInactivityMonitor } from './services/inactivityMonitor.js';
+import { loadAssistantHistory, persistAssistantTurn } from '../services/history.js';
 
 const COMMAND_PREFIXES = ['тренер', 'босс', 'trainer', 'boss', 'coach'];
 const COMMAND_PREFIX_SET = new Set(COMMAND_PREFIXES.map(prefix => prefix.toLowerCase()));
@@ -28,6 +26,8 @@ const CHAT_PROGRESS_MESSAGES = [
     'Подмешиваю иронию к фактчекингу… ☕️',
     'Прокручиваю базу знаний в поисках идеальной реплики… 📚',
 ];
+
+let stopInactivityMonitor = null;
 
 console.log('🤖 Initializing Training Bot...');
 
@@ -53,11 +53,18 @@ bot.start(async (ctx) => {
 bot.command('webapp', async ctx => {
     const profileId = ctx.state.profileId;
     const progressMessage = await sendProgressStatus(ctx, 'command');
-    const history = await loadHistory(profileId);
+    const historyState = await loadAssistantHistory(profileId);
     const { message, options } = buildOpenWebAppResponse(null);
 
     await sendFinalReply(ctx, progressMessage, message, options);
-    await saveHistory(profileId, history, '/webapp', message, 'open_webapp');
+    await persistAssistantTurn({
+        profileId,
+        previousState: historyState,
+        userMessage: '/webapp',
+        assistantMessage: message,
+        intent: 'open_webapp',
+        mode: 'command',
+    });
 });
 
 bot.on('text', async (ctx, next) => {
@@ -73,7 +80,8 @@ bot.on('text', async (ctx, next) => {
     const profile = ctx.state.profile;
 
     const progressMessage = await sendProgressStatus(ctx, mode);
-    const history = await loadHistory(profileId);
+    const historyState = await loadAssistantHistory(profileId);
+    const history = historyState.messages;
 
     if (mode === 'command') {
         const messageForRouter = payload || text;
@@ -85,7 +93,14 @@ bot.on('text', async (ctx, next) => {
                 disable_web_page_preview: true,
                 ...(quickOptions || {}),
             });
-            await saveHistory(profileId, history, text, quickMessage, quickIntentName || 'quick_command');
+            await persistAssistantTurn({
+                profileId,
+                previousState: historyState,
+                userMessage: text,
+                assistantMessage: quickMessage,
+                intent: quickIntentName || 'quick_command',
+                mode: 'command',
+            });
             await next();
             return;
         }
@@ -105,7 +120,14 @@ bot.on('text', async (ctx, next) => {
             await sendFinalReply(ctx, progressMessage, decision.clarification_question, {
                 disable_web_page_preview: true,
             });
-            await saveHistory(profileId, history, text, decision.clarification_question, decision.intent);
+            await persistAssistantTurn({
+                profileId,
+                previousState: historyState,
+                userMessage: text,
+                assistantMessage: decision.clarification_question,
+                intent: decision.intent,
+                mode: 'command',
+            });
             await next();
             return;
         }
@@ -113,7 +135,14 @@ bot.on('text', async (ctx, next) => {
         if (decision?.intent === 'open_webapp') {
             const { message, options } = buildOpenWebAppResponse(decision?.assistant_reply);
             await sendFinalReply(ctx, progressMessage, message, options);
-            await saveHistory(profileId, history, text, message, decision.intent);
+            await persistAssistantTurn({
+                profileId,
+                previousState: historyState,
+                userMessage: text,
+                assistantMessage: message,
+                intent: decision.intent,
+                mode: 'command',
+            });
             await next();
             return;
         }
@@ -127,7 +156,14 @@ bot.on('text', async (ctx, next) => {
 
         const finalMessage = assistantReply || DEFAULT_FALLBACK_MESSAGE;
         await sendFinalReply(ctx, progressMessage, finalMessage, { disable_web_page_preview: true });
-        await saveHistory(profileId, history, text, finalMessage, decision?.intent || 'fallback');
+        await persistAssistantTurn({
+            profileId,
+            previousState: historyState,
+            userMessage: text,
+            assistantMessage: finalMessage,
+            intent: decision?.intent || 'fallback',
+            mode: 'command',
+        });
         await next();
         return;
     }
@@ -135,7 +171,14 @@ bot.on('text', async (ctx, next) => {
     const assistantReply =
         (await resolveAssistantReply(null, { profile, message: text, history, mode })) || DEFAULT_FALLBACK_MESSAGE;
     await sendFinalReply(ctx, progressMessage, assistantReply, { disable_web_page_preview: true });
-    await saveHistory(profileId, history, text, assistantReply, 'conversation');
+    await persistAssistantTurn({
+        profileId,
+        previousState: historyState,
+        userMessage: text,
+        assistantMessage: assistantReply,
+        intent: 'conversation',
+        mode,
+    });
 
     await next();
 });
@@ -204,21 +247,6 @@ function formatAssistantReply(text, mode = 'chat') {
     }
 
     return formatted;
-}
-
-async function loadHistory(profileId) {
-    if (!profileId) {
-        return [];
-    }
-
-    try {
-        const state = await db.getDialogState(profileId, CONVERSATION_STATE_KEY);
-        const messages = state?.state_payload?.messages;
-        return Array.isArray(messages) ? messages : [];
-    } catch (error) {
-        console.error('Failed to load conversation history:', error);
-        return [];
-    }
 }
 
 async function handleQuickCommand(message, ctx) {
@@ -394,47 +422,6 @@ async function sendFinalReply(ctx, progressMessage, text, options = {}) {
     }
 }
 
-async function saveHistory(profileId, previousHistory, userMessage, assistantMessage, intent) {
-    if (!profileId) {
-        return;
-    }
-
-    try {
-        const now = new Date().toISOString();
-        const history = Array.isArray(previousHistory) ? [...previousHistory] : [];
-
-        if (userMessage) {
-            history.push({
-                role: 'user',
-                content: userMessage,
-                intent: intent || 'unknown',
-                at: now,
-            });
-        }
-
-        if (assistantMessage) {
-            history.push({
-                role: 'assistant',
-                content: assistantMessage,
-                intent: intent || 'unknown',
-                at: now,
-            });
-        }
-
-        const trimmed = history.slice(-HISTORY_LIMIT);
-        const expiresAt = new Date(Date.now() + HISTORY_TTL_MS);
-
-        await db.saveDialogState(
-            profileId,
-            CONVERSATION_STATE_KEY,
-            { messages: trimmed },
-            expiresAt
-        );
-    } catch (error) {
-        console.error('Failed to save conversation history:', error);
-    }
-}
-
 async function startBot() {
     try {
         await bot.telegram.deleteWebhook();
@@ -454,13 +441,25 @@ async function startBot() {
         await bot.launch();
         console.log('🚀 Bot is running and listening for messages...');
 
+        stopInactivityMonitor = startInactivityMonitor(bot, {
+            thresholdMinutes: 60,
+            intervalMs: 5 * 60 * 1000,
+            batchLimit: 25,
+        });
+
         process.once('SIGINT', () => {
             console.log('\n🛑 Stopping bot (SIGINT)...');
+            if (typeof stopInactivityMonitor === 'function') {
+                stopInactivityMonitor();
+            }
             bot.stop('SIGINT');
         });
 
         process.once('SIGTERM', () => {
             console.log('\n🛑 Stopping bot (SIGTERM)...');
+            if (typeof stopInactivityMonitor === 'function') {
+                stopInactivityMonitor();
+            }
             bot.stop('SIGTERM');
         });
     } catch (error) {

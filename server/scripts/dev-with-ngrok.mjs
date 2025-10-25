@@ -46,8 +46,11 @@ function spawnProcess(command, args, options = {}) {
 
     child.on('exit', (code, signal) => {
         if (!shuttingDown) {
-            log(`\n❌ Process ${command} exited with code ${code ?? 'null'} (${signal ?? 'no-signal'})`, colors.error);
-            shutdown(1);
+            // Не падаем если процесс завершился с кодом 0 или был остановлен через SIGTERM
+            if (code !== 0 && code !== null && signal !== 'SIGTERM') {
+                log(`\n⚠️  Process ${command} exited with code ${code} (${signal})`, colors.warn);
+                // Не вызываем shutdown, чтобы другие процессы продолжали работать
+            }
         }
     });
 
@@ -97,7 +100,11 @@ async function startNgrok() {
         args.push('--region', NGROK_REGION);
     }
 
-    ngrokProcess = spawnProcess(NGROK_BIN, args, { stdio: 'ignore' });
+    // Запускаем ngrok отдельно, чтобы его выход не влиял на другие процессы
+    ngrokProcess = spawn(NGROK_BIN, args, { 
+        stdio: 'ignore',
+        detached: false,
+    });
 
     const url = await waitForNgrokTunnel();
     ngrokUrl = url;

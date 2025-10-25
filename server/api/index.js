@@ -8,6 +8,7 @@ import reportsRouter from './routes/reports.js';
 import profileRouter from './routes/profile.js';
 import achievementsRouter from './routes/achievements.js';
 import exercisesRouter from './routes/exercises.js';
+import assistantRouter from './routes/assistant.js';
 import { profileContextMiddleware } from './middleware/profileContext.js';
 
 export function createHttpServer() {
@@ -27,6 +28,7 @@ export function createHttpServer() {
     app.use('/v1/profile', profileRouter);
     app.use('/v1/achievements', achievementsRouter);
     app.use('/v1/exercises', exercisesRouter);
+    app.use('/v1/assistant', assistantRouter);
 
     app.use((req, res) => {
         res.status(404).json({ error: 'not_found', message: 'Endpoint not found' });

@@ -28,11 +28,11 @@ class ConversationService {
         const trainerTone = this.shouldUseTrainerMode({ message, mode });
 
         if (trainerTone) {
-            const reply = internalAssistantEngine.generateTrainerReply({ profile, message, history });
+            const reply = await internalAssistantEngine.generateTrainerReply({ profile, message, history });
             return reply || this.buildGenericFallback(profile);
         }
 
-        const general = internalAssistantEngine.generateGeneralReply({ profile, message, history });
+        const general = await internalAssistantEngine.generateGeneralReply({ profile, message, history });
         if (general) {
             return general;
         }
@@ -58,7 +58,7 @@ class ConversationService {
         return TRAINER_INTENTS.has(detected.intent);
     }
 
-    buildFallbackReply({ profile, message, mode, trainerTone, history } = {}) {
+    async buildFallbackReply({ profile, message, mode, trainerTone, history } = {}) {
         if (!message) {
             return trainerTone
                 ? this.buildGenericFallback(profile)
@@ -80,7 +80,7 @@ class ConversationService {
         case 'report.start':
             return this.buildReportFallback();
         case 'motivation':
-            return internalAssistantEngine.buildMotivationMessage({ profile });
+            return internalAssistantEngine.buildMotivationMessage(profile);
         case 'help':
             return this.buildHelpFallback();
         case 'settings.open':

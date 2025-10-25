@@ -54,6 +54,16 @@ const INTENT_PATTERNS = [
         keywords: [/помощь/i, /что ты умеешь/i],
         priority: 30,
     },
+    {
+        intent: 'note.save',
+        keywords: [/(сохрани|заметк|запиши)/i],
+        priority: 85,
+    },
+    {
+        intent: 'triggers.help',
+        keywords: [/(триггер|ключев|как сохранять|что написать)/i],
+        priority: 35,
+    },
 ];
 
 const REMIND_LATER_PATTERNS = [
@@ -63,21 +73,29 @@ const REMIND_LATER_PATTERNS = [
 ];
 
 function matchIntent(text) {
-    const matches = INTENT_PATTERNS
-        .map(pattern => {
-            const matched = pattern.keywords.every(regex => regex.test(text));
-            return matched ? { intent: pattern.intent, priority: pattern.priority } : null;
-        })
-        .filter(Boolean);
+    const matches = [];
 
-    if (matches.length === 0) {
-        return { intent: 'unknown', confidence: 0 };
+    for (const pattern of INTENT_PATTERNS) {
+        const matched = pattern.keywords.every(regex => regex.test(text));
+        if (matched) {
+            matches.push({ intent: pattern.intent, priority: pattern.priority });
+        }
     }
 
-    const best = matches.sort((a, b) => b.priority - a.priority)[0];
+    if (matches.length === 0) {
+        return { intent: 'unknown', confidence: 0, candidates: [] };
+    }
+
+    matches.sort((a, b) => b.priority - a.priority);
+    const best = matches[0];
     const confidence = Math.min(1, best.priority / 100);
 
-    return { intent: best.intent, confidence };
+    const candidates = matches.map(match => ({
+        intent: match.intent,
+        confidence: Math.min(1, match.priority / 100),
+    }));
+
+    return { intent: best.intent, confidence, candidates };
 }
 
 function extractRemindLater(text) {

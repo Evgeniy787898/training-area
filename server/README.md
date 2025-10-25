@@ -9,13 +9,16 @@ server/
 ├── bot/                    # Telegram бот
 │   ├── commands/          # Обработчики команд (/start, /plan, /report, ...)
 │   ├── middleware/        # Аутентификация, логирование, состояние диалога
+│   ├── services/          # Фоновые задачи бота
+│   │   └── inactivityMonitor.js
 │   └── index.js           # Точка входа бота
 ├── services/              # Бизнес-логика
 │   ├── internalAssistantEngine.js  # Встроенный движок ответов и планов
 │   ├── planner.js         # Публичный API планировщика (обёртка над движком)
 │   ├── conversation.js    # Генерация ответов в чате (движок + fallback)
 │   ├── localResponder.js  # Шаблоны быстрых ответов без сложной логики
-│   └── nlu.js             # Простая NLU-матрица (интенты и словари)
+│   ├── nlu.js             # Простая NLU-матрица (интенты и словари)
+│   └── history.js         # Унифицированное хранилище истории диалога
 ├── infrastructure/        # Интеграции и клиенты внешних сервисов
 │   └── supabase.js        # Клиент Supabase
 ├── config/                # Конфигурация окружения
@@ -113,6 +116,10 @@ Telegram → Bot → Middleware → Command Handler → Services → Supabase
 3. **authMiddleware** — создание/проверка профиля и фильтр по `TELEGRAM_ALLOWED_IDS`
 4. **dialogStateMiddleware** — управление историей диалога (макс. 12 сообщений, TTL 48 ч.)
 
+### Фоновые задачи
+
+- `inactivityMonitor` (`bot/services/inactivityMonitor.js`) каждые 5 минут проверяет неактивные диалоги, отправляет прощальное сообщение и очищает историю спустя 60 минут простоя.
+
 ### Сервисы
 
 #### internalAssistantEngine (`services/internalAssistantEngine.js`)
@@ -127,6 +134,14 @@ Telegram → Bot → Middleware → Command Handler → Services → Supabase
 #### ConversationService (`services/conversation.js`)
 - Определяет, нужен ли тренерский тон или свободный ответ
 - Использует движок, а при необходимости обращается к `localResponder`
+
+#### HistoryService (`services/history.js`)
+- Унифицированные функции загрузки и сохранения истории (`loadAssistantHistory`, `persistAssistantTurn`)
+- Наполняет метаданные (`last_user_message_at`, счётчики сообщений), которые используют bot и HTTP API
+
+#### Assistant API (`api/routes/assistant.js`)
+- `POST /v1/assistant/reply` — получить ответ движка (без Telegram) и при необходимости записать его в историю
+- `GET /v1/assistant/notes`, `POST /v1/assistant/notes` — работа с заметками (`assistant_notes`) через WebApp/интеграции
 
 #### Supabase Edge Function `update_plan`
 - Получает профиль, свежие сессии и причину обновления
@@ -160,8 +175,8 @@ SUPABASE_URL=... SUPABASE_SERVICE_KEY=... TELEGRAM_BOT_TOKEN=... \
 
 ## Документация
 
-- [Внутренний движок ассистента](../docs/vnutrenniy-assistent-dvizhok.md)
-- [Правила диалогов](../docs/pravila-ii-i-dialoga.md)
+- [Внутренний движок тренера](../docs/dvizhok-trenera.md)
+- [Правила диалогов](../docs/pravila-trenera-i-dialoga.md)
 - [Архитектура и технические решения](../docs/arhitektura-i-tekhnicheskie-resheniya.md)
 - [Схема API](../docs/api-schema.md)
 

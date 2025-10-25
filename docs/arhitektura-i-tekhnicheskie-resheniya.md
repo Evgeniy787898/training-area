@@ -11,12 +11,13 @@
    - Обработчики команд `/start`, `/plan`, `/report`, `/stats`, `/settings`.
    - Middleware для авторизации твоего единственного Telegram ID и валидации подписанного payload из WebApp.
    - Сервис форматирования сообщений (Markdown, эмодзи, таблицы) и нормализации единиц измерения.
+   - Фоновый мониторинг диалогов: завершение сессии спустя 60 минут бездействия и очистка истории переписки.
 2. **Сервис планирования (внутренний движок)**
    - Модуль генерации тренировок: prompt-инженерия с контекстом цели, доступного оборудования и истории прогресса.
    - Модуль анализа обратной связи: пересчет нагрузки при высоком RPE.
-   - Очередь запросов с троттлингом 1 запрос/сек и глобальным лимитом 60 запросов/минуту (подстроить под тариф OpenAI).
+   - Очередь запросов с троттлингом 1 запрос/сек и глобальным лимитом 60 запросов/минуту, чтобы не перегружать обработку планов и отчётов.
 3. **Supabase Backend**
-   - Таблицы: `profiles`, `training_sessions`, `metrics`, `achievements`, `weekly_reviews`, `exercise_progress`, `operation_log`, `capabilities`, `plan_versions`.
+   - Таблицы: `profiles`, `training_sessions`, `metrics`, `achievements`, `weekly_reviews`, `exercise_progress`, `operation_log`, `capabilities`, `plan_versions`, `assistant_notes` (журнал заметок), `dialog_states`.
    - Edge Function `update_plan` — анализирует свежие данные, собирает план неделя и обновляет расписание.
    - Edge Function `notify_daily` — пушит план на день в Telegram через webhook и фиксирует факт отправки в `operation_log`.
    - Edge Function `update_settings` — применяет изменения уведомлений и таймзон, валидирует конфликты.
@@ -26,6 +27,10 @@
 5. **Наблюдаемость**
    - Стрим логов Supabase → Logflare → Grafana Cloud для дешбордов latency и ошибок.
    - Webhook-интеграция с Telegram при критических ошибках (категория `external_api_failure`).
+
+6. **Assistant API**
+   - REST-эндпоинты `POST /v1/assistant/reply` и `GET|POST /v1/assistant/notes` позволяют использовать движок вне Telegram: получать ответы с учетом истории диалога, читать и создавать заметки.
+   - Ответы API используют те же сервисы истории (`services/history.js`) и правила внутреннего движка, поэтому чат и WebApp остаются синхронизированы.
 
 ## Структура проекта
 ```
@@ -66,6 +71,7 @@ root
 | `plan_version_audit` | `id`, `plan_version_id`, `actor`, `action`, `diff`, `created_at` | `uuid`, `uuid`, `text`, `text`, `jsonb`, `timestamptz` | Индекс `plan_version_audit_plan_version_id_idx` | FK `plan_version_id` → `plan_versions.id` |
 | `security_events` | `id`, `profile_id`, `event_type`, `severity`, `context`, `notified_at`, `resolved_at`, `resolution_comment` | `uuid`, `uuid`, `text`, `text`, `jsonb`, `timestamptz`, `timestamptz`, `text` | Индекс `security_events_profile_id_event_type_idx` | FK `profile_id` → `profiles.id` (nullable); используется в процессе поддержки |
 | `dialog_states` | `id`, `profile_id`, `state_type`, `state_payload`, `expires_at`, `updated_at` | `uuid`, `uuid`, `text`, `jsonb`, `timestamptz`, `timestamptz` | Индекс `dialog_states_profile_id_state_type_idx`, TTL контролируется job-очисткой | FK `profile_id` → `profiles.id` |
+| `assistant_notes` | `id`, `profile_id`, `title`, `content`, `tags`, `source`, `metadata`, `created_at` | `uuid`, `uuid`, `text`, `text`, `text[]`, `text`, `jsonb`, `timestamptz` | Индекс `assistant_notes_profile_created_idx` | FK `profile_id` → `profiles.id` |
 | `operation_log` | `id`, `profile_id`, `action`, `payload_hash`, `status`, `error_code`, `created_at` | `uuid`, `uuid`, `text`, `text`, `text`, `text`, `timestamptz` | Индекс `operation_log_profile_id_action_idx` | FK `profile_id` → `profiles.id` |
 
 *Индексы по полям дат обязательны для построения аналитики и поддержания SLA ответов ≤ 500 мс на запрос статистики.*
@@ -119,7 +125,7 @@ root
 
 ## Supabase миграции, RLS и бэкапы
 - **Миграции**: все изменения схемы фиксируются в `supabase/schemas.sql` и сопровождаются версионированными миграциями (`YYYYMMDDHHMM_<name>.sql`). В каждом файле перечисляются DDL-операции и связанные индексы; при необходимости создаются функции `up`/`down` для роллбэка.
-- **Политики RLS**: таблицы пользовательских данных (`profiles`, `training_sessions`, `exercise_progress`, `metrics`, `weekly_reviews`, `plan_versions`, `plan_version_items`, `operation_log`, `observability_events`, `dialog_states`, `analytics_cache`, `security_events`) защищены политикой `using (auth.uid() = profile_id)` или через джойны на `profiles`. Для Edge Functions создаётся сервисная роль `service_role` с политикой `with check (true)` и ограничением на тип операции (например, только `insert` для логов и записей аудита). Анонимные ключи получают только права чтения агрегированных справочников (`capabilities`, `analytics_reports`), доступ к `plan_version_audit` и `security_events` открыт только роли `support_operator`.
+- **Политики RLS**: таблицы пользовательских данных (`profiles`, `training_sessions`, `exercise_progress`, `metrics`, `weekly_reviews`, `plan_versions`, `plan_version_items`, `operation_log`, `observability_events`, `dialog_states`, `assistant_notes`, `analytics_cache`, `security_events`) защищены политикой `using (auth.uid() = profile_id)` или через джойны на `profiles`. Для Edge Functions создаётся сервисная роль `service_role` с политикой `with check (true)` и ограничением на тип операции (например, только `insert` для логов и записей аудита). Анонимные ключи получают только права чтения агрегированных справочников (`capabilities`, `analytics_reports`), доступ к `plan_version_audit` и `security_events` открыт только роли `support_operator`.
 - **Аудит**: триггеры `SET updated_at = now()` и логирование в `plan_version_audit` / `security_events` позволяют расследовать изменения и подозрительные действия.
 - **Резервное копирование**: ежедневно в 03:00 UTC выполняется экспорт базы через `supabase db dump` в S3-бакет `supabase-backups/{env}/{date}`. Хранение — 35 дней, еженедельные снапшоты сохраняются 6 месяцев. Для критичных таблиц включается точка восстановления (PITR) с периодом удержания 7 дней. План восстановления: развернуть новый инстанс, выполнить импорт дампа, перепривязать переменные окружения.
 
@@ -162,8 +168,8 @@ root
 - Хранить ключи в `.env` и не коммитить в репозиторий. Для CI использовать секреты GitHub Actions (`Settings → Secrets → Actions`).
 - Доступ к боту ограничен проверкой Telegram ID + проверкой подписи `hash` в стартовом payload.
 - Edge Functions выполняют роль-based access policies: только `service_role` может обновлять `profiles`, все публичные запросы идут через row level security.
-- Запросы к OpenAI идут через HTTPS, Supabase подключение — по SSL. Межсервисные вызовы подписываются JWT с коротким TTL (15 мин).
-- Регламент ротации ключей: раз в 90 дней менять OpenAI и Supabase сервисный ключ, в документации фиксировать дату следующей ротации.
+- Все вычисления движка выполняются локально, Supabase подключение — по SSL. Межсервисные вызовы подписываются JWT с коротким TTL (15 мин).
+- Регламент ротации ключей: раз в 90 дней обновлять Supabase сервисный ключ и секреты Telegram, в документации фиксировать дату следующей ротации.
 
 ## Мониторинг и журналы
 - Логи бота отправляются в Supabase Logflare или Papertrail. Структура: `timestamp`, `trace_id`, `intent`, `decision`, `latency_ms`, `status`.

@@ -3,7 +3,7 @@ import internalAssistantEngine from './internalAssistantEngine.js';
 export class PlannerService {
     async generateTrainingPlan(userContext = {}) {
         try {
-            return internalAssistantEngine.generateTrainingPlan(userContext);
+            return await internalAssistantEngine.generateTrainingPlan(userContext);
         } catch (error) {
             console.error('Error generating training plan:', error);
             throw new Error('Не удалось сгенерировать план тренировки');
@@ -12,7 +12,7 @@ export class PlannerService {
 
     async analyzeTrainingReport(reportContext = {}) {
         try {
-            return internalAssistantEngine.analyzeTrainingReport(reportContext);
+            return await internalAssistantEngine.analyzeTrainingReport(reportContext);
         } catch (error) {
             console.error('Error analyzing training report:', error);
             throw new Error('Не удалось проанализировать отчёт');
@@ -21,7 +21,7 @@ export class PlannerService {
 
     async generateMotivationalMessage(context = {}) {
         try {
-            return internalAssistantEngine.buildMotivationMessage(context);
+            return await internalAssistantEngine.buildMotivationMessage(context);
         } catch (error) {
             console.error('Error generating motivational message:', error);
             return 'Отличная работа! Продолжай в том же духе 💪';
