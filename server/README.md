@@ -27,8 +27,9 @@ server/
 ├── supabase/              # Supabase ресурсы
 │   ├── migrations/       # SQL миграции (инициализация + обновления)
 │   └── functions/        # Edge Functions
-│       ├── update_plan/  # Обновление плана
-│       └── notify_daily/ # Ежедневные уведомления
+│       ├── update_plan/      # Обновление плана
+│       ├── notify_daily/     # Ежедневные уведомления
+│       └── update_settings/  # Применение настроек
 ├── package.json
 └── .env                  # Переменные окружения (не в git)
 ```
@@ -153,6 +154,19 @@ supabase functions deploy update_plan
 Deploy:
 ```bash
 supabase functions deploy notify_daily
+```
+
+### update_settings
+Применяет изменения настроек профиля и управляет паузой уведомлений.
+
+Deploy:
+```bash
+supabase functions deploy update_settings
+```
+
+Запуск локально (пример для update_plan):
+```bash
+supabase functions serve update_plan --env-file ../.env.local
 ```
 
 Настройка cron:
