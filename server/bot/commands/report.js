@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import ru from 'date-fns/locale/ru/index.js';
 import plannerService from '../../services/planner.js';
 import { beginChatResponse, replyWithTracking } from '../utils/chat.js';
+import { buildMainMenuKeyboard, withMainMenuButton } from '../utils/menu.js';
 
 /**
  * Команда /report - отчёт о тренировке
@@ -22,7 +23,8 @@ export async function reportCommand(ctx) {
         if (!sessions || sessions.length === 0) {
             await replyWithTracking(ctx,
                 '📋 Нет запланированных тренировок для отчёта.\n\n' +
-                'Сначала создай план командой /plan'
+                'Сначала создай план командой /plan',
+                buildMainMenuKeyboard()
             );
             return;
         }
@@ -36,7 +38,7 @@ export async function reportCommand(ctx) {
             )];
         });
 
-        const keyboard = Markup.inlineKeyboard(buttons);
+        const keyboard = withMainMenuButton(buttons);
 
         await replyWithTracking(ctx,
             '📝 **Отчёт о тренировке**\n\n' +
@@ -92,7 +94,7 @@ export async function reportSessionCallback(ctx) {
             `7-8 — Тяжело\n` +
             `9-10 — Очень тяжело`;
 
-        const keyboard = Markup.inlineKeyboard([
+        const keyboard = withMainMenuButton([
             [
                 Markup.button.callback('1-3 😌', 'rpe_2'),
                 Markup.button.callback('4-6 😊', 'rpe_5'),
@@ -150,7 +152,7 @@ export async function rpeCallback(ctx) {
         `**Шаг 2/3: Как выполнил?**\n\n` +
         `Удалось ли выполнить план полностью?`;
 
-    const keyboard = Markup.inlineKeyboard([
+    const keyboard = withMainMenuButton([
         [Markup.button.callback('✅ Да, полностью', 'completion_full')],
         [Markup.button.callback('🔸 Частично', 'completion_partial')],
         [Markup.button.callback('❌ Не получилось', 'completion_none')],
@@ -200,7 +202,7 @@ export async function completionCallback(ctx) {
         `Напиши, если хочешь добавить комментарий о самочувствии, технике или боли.\n\n` +
         `Или нажми "Пропустить", чтобы завершить отчёт.`;
 
-    const keyboard = Markup.inlineKeyboard([
+    const keyboard = withMainMenuButton([
         [Markup.button.callback('⏭️ Пропустить', 'notes_skip')],
     ]);
 

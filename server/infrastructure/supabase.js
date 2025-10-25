@@ -233,6 +233,38 @@ export const db = {
         return data;
     },
 
+    async getExerciseProgressOverview(profileId, { limit = 50 } = {}) {
+        const { data, error } = await supabase
+            .from('exercise_progress')
+            .select(`
+        id,
+        exercise_key,
+        level_result,
+        level_target,
+        decision,
+        created_at,
+        training_sessions!inner(profile_id, date)
+      `)
+            .eq('training_sessions.profile_id', profileId)
+            .order('created_at', { ascending: false })
+            .limit(limit);
+
+        if (error) {
+            console.error('Error fetching exercise progress overview:', error);
+            throw error;
+        }
+
+        const latestByExercise = new Map();
+
+        for (const item of data || []) {
+            if (!latestByExercise.has(item.exercise_key)) {
+                latestByExercise.set(item.exercise_key, item);
+            }
+        }
+
+        return Array.from(latestByExercise.values());
+    },
+
     // Metrics operations
     async recordMetric(profileId, metricType, value, unit, source = 'bot') {
         const { data, error } = await supabase

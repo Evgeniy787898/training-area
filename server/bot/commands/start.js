@@ -1,8 +1,8 @@
-import { Markup } from 'telegraf';
 import { addDays, format, startOfWeek } from 'date-fns';
 import { db } from '../../infrastructure/supabase.js';
 import { beginChatResponse, replyWithTracking } from '../utils/chat.js';
 import { buildDefaultWeekPlan } from '../../services/staticPlan.js';
+import { buildMainMenuKeyboard } from '../utils/menu.js';
 
 const PLAN_CACHE_STATE = 'ui_cached_plan';
 
@@ -28,11 +28,7 @@ export async function startCommand(ctx) {
 
     await replyWithTracking(ctx, message, {
         parse_mode: 'Markdown',
-        ...Markup.keyboard([
-            ['📅 План на сегодня', '📊 Мой прогресс'],
-            ['📝 Отчёт о тренировке', '⚙️ Настройки'],
-            ['❓ Помощь'],
-        ]).resize(),
+        ...buildMainMenuKeyboard(),
     });
 }
 

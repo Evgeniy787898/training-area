@@ -4,6 +4,7 @@ import { subDays, format } from 'date-fns';
 import ru from 'date-fns/locale/ru/index.js';
 import { beginChatResponse, replyWithTracking } from '../utils/chat.js';
 import { getProgressionOverview } from '../../services/staticPlan.js';
+import { buildMainMenuKeyboard, withMainMenuButton } from '../utils/menu.js';
 
 const EXERCISE_LABELS = {
     pullups: 'Подтягивания',
@@ -20,7 +21,7 @@ export async function statsCommand(ctx) {
 
     try {
         await beginChatResponse(ctx);
-        await replyWithTracking(ctx, '⏳ Собираю статистику...');
+        await replyWithTracking(ctx, '⏳ Собираю статистику...', buildMainMenuKeyboard());
 
         // Получаем данные за последние 4 недели
         const endDate = new Date();
@@ -33,7 +34,7 @@ export async function statsCommand(ctx) {
 
         if (!sessions || sessions.length === 0) {
             await beginChatResponse(ctx);
-            await replyWithTracking(ctx, buildPrimerMessage(), { parse_mode: 'Markdown' });
+            await replyWithTracking(ctx, buildPrimerMessage(), { parse_mode: 'Markdown', ...buildMainMenuKeyboard() });
             return;
         }
 
@@ -41,7 +42,7 @@ export async function statsCommand(ctx) {
         const stats = calculateStats(sessions);
         const statsMessage = formatStatsMessage(stats);
 
-        const keyboard = Markup.inlineKeyboard([
+        const keyboard = withMainMenuButton([
             [Markup.button.callback('📈 Подробная аналитика', 'stats_detailed')],
             [Markup.button.callback('🏆 Достижения', 'stats_achievements')],
         ]);
@@ -55,7 +56,7 @@ export async function statsCommand(ctx) {
     } catch (error) {
         console.error('Error in stats command:', error);
         await beginChatResponse(ctx);
-        await replyWithTracking(ctx, '😔 Не удалось загрузить статистику. Попробуй позже.');
+        await replyWithTracking(ctx, '😔 Не удалось загрузить статистику. Попробуй позже.', buildMainMenuKeyboard());
     }
 }
 
@@ -184,11 +185,11 @@ export async function statsDetailedCallback(ctx) {
         const message = formatDetailedAnalytics(volumeTrend, rpeDistribution, adherence);
 
         await beginChatResponse(ctx);
-        await replyWithTracking(ctx, message, { parse_mode: 'Markdown' });
+        await replyWithTracking(ctx, message, { parse_mode: 'Markdown', ...buildMainMenuKeyboard() });
     } catch (error) {
         console.error('Failed to load detailed stats:', error);
         await beginChatResponse(ctx);
-        await replyWithTracking(ctx, '😔 Не удалось собрать подробную аналитику. Попробуй позже.');
+        await replyWithTracking(ctx, '😔 Не удалось собрать подробную аналитику. Попробуй позже.', buildMainMenuKeyboard());
     }
 }
 
@@ -221,7 +222,7 @@ export async function statsAchievementsCallback(ctx) {
                 '• Серия 7 дней 🔥\n' +
                 '• Месяц без пропусков 💎\n' +
                 '• Личный рекорд 🏅',
-                { parse_mode: 'Markdown' }
+                { parse_mode: 'Markdown', ...buildMainMenuKeyboard() }
             );
         } else {
             let message = '🏆 **Твои достижения**\n\n';
@@ -238,13 +239,13 @@ export async function statsAchievementsCallback(ctx) {
                 }
                 message += '\n';
             });
-            await replyWithTracking(ctx, message, { parse_mode: 'Markdown' });
+            await replyWithTracking(ctx, message, { parse_mode: 'Markdown', ...buildMainMenuKeyboard() });
         }
 
     } catch (error) {
         console.error('Error showing achievements:', error);
         await beginChatResponse(ctx);
-        await replyWithTracking(ctx, '😔 Не удалось загрузить достижения.');
+        await replyWithTracking(ctx, '😔 Не удалось загрузить достижения.', buildMainMenuKeyboard());
     }
 }
 

@@ -6,6 +6,7 @@ const Navigation = ({ activeTab, onTabChange }) => {
         { id: 'week', label: 'Неделя', icon: '📆' },
         { id: 'report', label: 'Отчёт', icon: '📝' },
         { id: 'progress', label: 'Прогресс', icon: '📊' },
+        { id: 'exercises', label: 'Упражнения', icon: '🏋️' },
         { id: 'settings', label: 'Настройки', icon: '⚙️' },
     ];
 

@@ -3,6 +3,7 @@ import { addDays, format } from 'date-fns';
 import ru from 'date-fns/locale/ru/index.js';
 import { db } from '../../infrastructure/supabase.js';
 import { beginChatResponse, replyWithTracking } from '../utils/chat.js';
+import { withMainMenuButton } from '../utils/menu.js';
 
 const RESCHEDULE_STATE = 'reschedule_draft';
 const DATE_FORMAT = 'yyyy-MM-dd';
@@ -133,7 +134,7 @@ async function presentRescheduleOptions(ctx, session, entities = {}) {
 
     await replyWithTracking(ctx, header, {
         parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard(buttons),
+        ...withMainMenuButton(buttons),
     });
 }
 
