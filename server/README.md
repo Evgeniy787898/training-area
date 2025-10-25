@@ -59,6 +59,11 @@ TELEGRAM_BOT_TOKEN=your_token
 OPENAI_API_KEY=sk-proj-your_key
 # (optional) модель OpenAI, по умолчанию gpt-4o-mini
 OPENAI_MODEL=gpt-4o-mini
+# (optional) ограничение параллелизма и повторов OpenAI-запросов
+OPENAI_MAX_CONCURRENCY=1
+OPENAI_MIN_INTERVAL_MS=800
+OPENAI_MAX_RETRIES=3
+OPENAI_RETRY_INITIAL_DELAY_MS=1000
 # (optional) ограничьте доступ конкретными аккаунтами
 TELEGRAM_ALLOWED_IDS=123456789,987654321
 

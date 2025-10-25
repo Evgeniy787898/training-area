@@ -13,6 +13,16 @@ import { DEMO_PROFILE_SUMMARY } from './services/demoData';
 import StatusBadge from './components/StatusBadge';
 
 const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME || null;
+const STANDALONE_MODE = import.meta.env.VITE_STANDALONE_MODE === '1';
+const STANDALONE_USER = {
+    id: import.meta.env.VITE_STANDALONE_TELEGRAM_ID
+        ? Number(import.meta.env.VITE_STANDALONE_TELEGRAM_ID)
+        : null,
+    first_name: import.meta.env.VITE_STANDALONE_FIRST_NAME || 'Guest',
+    last_name: import.meta.env.VITE_STANDALONE_LAST_NAME || '',
+    username: import.meta.env.VITE_STANDALONE_USERNAME || undefined,
+};
+const STANDALONE_INIT_DATA = import.meta.env.VITE_STANDALONE_INIT_DATA || '';
 
 function App() {
     const [activeTab, setActiveTab] = useState('today');
@@ -28,11 +38,21 @@ function App() {
         const tg = window.Telegram?.WebApp;
 
         if (!tg) {
-            setProfileError({
-                code: 'telegram_webapp_required',
-                message: 'Запустите WebApp внутри Telegram',
-            });
-            setProfileLoading(false);
+            if (STANDALONE_MODE) {
+                const fallbackUser = {
+                    ...STANDALONE_USER,
+                    id: Number.isFinite(STANDALONE_USER.id) ? STANDALONE_USER.id : null,
+                };
+                setTelegramUser(fallbackUser);
+                configureClient({ telegramUser: fallbackUser, initData: STANDALONE_INIT_DATA });
+                setProfileError(null);
+            } else {
+                setProfileError({
+                    code: 'telegram_webapp_required',
+                    message: 'Запустите WebApp внутри Telegram',
+                });
+                setProfileLoading(false);
+            }
             return;
         }
 
@@ -68,16 +88,35 @@ function App() {
             setLastTraceId(traceId);
             setDemoMode(false);
         } catch (error) {
-            setProfileError(error);
-            setProfileSummary(DEMO_PROFILE_SUMMARY);
             setLastTraceId(error.traceId || null);
-            setDemoMode(true);
-            pushToast({
-                title: 'Демо режим',
-                message: 'Не удалось связаться с сервером. Показаны примерочные данные.',
-                type: 'warning',
-                traceId: error.traceId,
-            });
+
+            const authError = error.status === 401 || error.status === 403
+                || error.code === 'auth_required'
+                || error.code === 'invalid_signature';
+
+            if (authError) {
+                setProfileError(error);
+                setProfileSummary(null);
+                setDemoMode(false);
+                pushToast({
+                    title: 'Нет доступа к API',
+                    message: STANDALONE_MODE
+                        ? 'Проверь токен доступа и идентификатор профиля для режима предпросмотра.'
+                        : 'Открой WebApp из Telegram, чтобы подтвердить подпись.',
+                    type: 'error',
+                    traceId: error.traceId,
+                });
+            } else {
+                setProfileError(error);
+                setProfileSummary(DEMO_PROFILE_SUMMARY);
+                setDemoMode(true);
+                pushToast({
+                    title: 'Демо режим',
+                    message: 'Не удалось связаться с сервером. Показаны примерочные данные.',
+                    type: 'warning',
+                    traceId: error.traceId,
+                });
+            }
         } finally {
             setProfileLoading(false);
         }
@@ -202,7 +241,11 @@ function App() {
                             </span>
                         )}
                         {demoMode && (
-                            <span className="demo-badge">Режим предпросмотра — подключите WebApp из Telegram</span>
+                            <span className="demo-badge">
+                                {STANDALONE_MODE
+                                    ? 'Нет соединения с API — проверь переменные окружения.'
+                                    : 'Режим предпросмотра — подключите WebApp из Telegram'}
+                            </span>
                         )}
                     </div>
 
