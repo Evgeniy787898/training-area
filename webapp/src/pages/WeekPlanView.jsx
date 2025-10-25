@@ -1,56 +1,147 @@
-import React from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { addDays, format, isToday, parseISO } from 'date-fns';
+import { ru } from 'date-fns/locale';
+import { apiClient } from '../api/client';
+import { useAppContext } from '../context/AppContext';
+import SkeletonCard from '../components/SkeletonCard';
+import ErrorState from '../components/ErrorState';
 
 const WeekPlanView = () => {
-    const weekPlan = [
-        { day: 'Пн', date: '27', status: 'done', type: 'Верх' },
-        { day: 'Вт', date: '28', status: 'done', type: 'Низ' },
-        { day: 'Ср', date: '29', status: 'today', type: 'Верх' },
-        { day: 'Чт', date: '30', status: 'planned', type: 'Низ' },
-        { day: 'Пт', date: '31', status: 'planned', type: 'Верх' },
-        { day: 'Сб', date: '1', status: 'rest', type: 'Отдых' },
-        { day: 'Вс', date: '2', status: 'rest', type: 'Отдых' },
-    ];
+    const { showToast } = useAppContext();
+    const [referenceDate, setReferenceDate] = useState(new Date());
+    const [state, setState] = useState({ loading: true, sessions: [], source: null, week: null, error: null });
 
-    const getStatusIcon = (status) => {
-        switch (status) {
-            case 'done': return '✅';
-            case 'today': return '👉';
-            case 'planned': return '📋';
-            case 'rest': return '💤';
-            default: return '';
+    const loadWeek = useCallback(async (date) => {
+        setState(prev => ({ ...prev, loading: true, error: null }));
+        try {
+            const { data } = await apiClient.getWeekPlan(format(date, 'yyyy-MM-dd'));
+            setState({
+                loading: false,
+                sessions: data.sessions || [],
+                source: data.source,
+                week: { start: data.week_start, end: data.week_end },
+                error: null,
+            });
+        } catch (error) {
+            setState({ loading: false, sessions: [], source: null, week: null, error });
         }
+    }, []);
+
+    useEffect(() => {
+        loadWeek(referenceDate);
+    }, [referenceDate, loadWeek]);
+
+    const handleChangeWeek = (direction) => {
+        const nextDate = addDays(referenceDate, direction * 7);
+        setReferenceDate(nextDate);
+    };
+
+    const sessionsByDate = new Map((state.sessions || []).map(session => [session.date, session]));
+    const weekStartDate = state.week?.start ? parseISO(state.week.start) : referenceDate;
+
+    const renderContent = () => {
+        if (state.loading) {
+            return <SkeletonCard lines={5} />;
+        }
+
+        if (state.error) {
+            return (
+                <ErrorState
+                    message={state.error.message}
+                    actionLabel="Обновить"
+                    onRetry={() => loadWeek(referenceDate)}
+                />
+            );
+        }
+
+        const days = [...Array(7)].map((_, index) => {
+            const dayDate = addDays(weekStartDate, index);
+            const dateKey = format(dayDate, 'yyyy-MM-dd');
+            const session = sessionsByDate.get(dateKey);
+            const status = session?.status || 'rest';
+
+            return {
+                day: format(dayDate, 'EE', { locale: ru }),
+                date: format(dayDate, 'd MMM', { locale: ru }),
+                isToday: isToday(dayDate),
+                status,
+                session,
+            };
+        });
+
+        const planned = days.filter(day => day.session).length;
+        const completed = days.filter(day => day.session?.status === 'done').length;
+
+        const onOpenInChat = () => {
+            showToast({
+                title: 'Открыть в чате',
+                message: 'Нажми кнопку «План» в чате, чтобы получить полную версию.',
+                type: 'info',
+            });
+            window.Telegram?.WebApp?.close();
+        };
+
+        return (
+            <>
+                <div className="week-calendar">
+                    {days.map((day, index) => (
+                        <div
+                            key={index}
+                            className={`day-card ${day.status} ${day.isToday ? 'today' : ''}`}
+                        >
+                            <div className="day-header">
+                                <span className="day-name">{day.day}</span>
+                                <span className="day-date">{day.date}</span>
+                            </div>
+                            <div className="day-status">
+                                {day.status === 'done' && '✅'}
+                                {day.status === 'planned' && '📋'}
+                                {day.status === 'skipped' && '⏭️'}
+                                {day.status === 'rest' && '💤'}
+                                {day.isToday && '👉'}
+                            </div>
+                            <div className="day-type">{day.session?.session_type || 'Отдых'}</div>
+                            {day.session?.focus && <div className="day-focus">🎯 {day.session.focus}</div>}
+                        </div>
+                    ))}
+                </div>
+
+                <div className="week-stats">
+                    <div className="stat-item">
+                        <span className="stat-label">Выполнено</span>
+                        <span className="stat-value">{completed}/{planned}</span>
+                    </div>
+                    <div className="stat-item">
+                        <span className="stat-label">Источник</span>
+                        <span className="stat-value">{state.source === 'fallback' ? 'базовый план' : 'Supabase'}</span>
+                    </div>
+                    <button className="btn btn-secondary" onClick={onOpenInChat}>
+                        Открыть в чате
+                    </button>
+                </div>
+            </>
+        );
     };
 
     return (
         <div className="view week-view">
             <h2>📆 План на неделю</h2>
 
-            <div className="week-calendar">
-                {weekPlan.map((day, index) => (
-                    <div
-                        key={index}
-                        className={`day-card ${day.status}`}
-                    >
-                        <div className="day-header">
-                            <span className="day-name">{day.day}</span>
-                            <span className="day-date">{day.date}</span>
-                        </div>
-                        <div className="day-status">{getStatusIcon(day.status)}</div>
-                        <div className="day-type">{day.type}</div>
-                    </div>
-                ))}
+            <div className="week-toolbar">
+                <button className="btn btn-secondary" onClick={() => handleChangeWeek(-1)} aria-label="Предыдущая неделя">
+                    ←
+                </button>
+                <div className="week-range">
+                    {state.week
+                        ? `${format(parseISO(state.week.start), 'd MMM', { locale: ru })} — ${format(parseISO(state.week.end), 'd MMM', { locale: ru })}`
+                        : format(referenceDate, 'd MMM', { locale: ru })}
+                </div>
+                <button className="btn btn-secondary" onClick={() => handleChangeWeek(1)} aria-label="Следующая неделя">
+                    →
+                </button>
             </div>
 
-            <div className="week-stats">
-                <div className="stat-item">
-                    <span className="stat-label">Выполнено</span>
-                    <span className="stat-value">2/5</span>
-                </div>
-                <div className="stat-item">
-                    <span className="stat-label">Прогресс</span>
-                    <span className="stat-value">40%</span>
-                </div>
-            </div>
+            {renderContent()}
         </div>
     );
 };

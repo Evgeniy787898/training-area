@@ -2,6 +2,16 @@ import { Markup } from 'telegraf';
 import { db } from '../../infrastructure/supabase.js';
 import { subDays, format } from 'date-fns';
 import ru from 'date-fns/locale/ru/index.js';
+import { beginChatResponse, replyWithTracking } from '../utils/chat.js';
+import { getProgressionOverview } from '../../services/staticPlan.js';
+import { buildMainMenuKeyboard, withMainMenuButton } from '../utils/menu.js';
+
+const EXERCISE_LABELS = {
+    pullups: 'Подтягивания',
+    pushups: 'Отжимания',
+    squats: 'Приседания',
+    legRaises: 'Кор',
+};
 
 /**
  * Команда /stats - показать статистику и прогресс
@@ -10,7 +20,8 @@ export async function statsCommand(ctx) {
     const profileId = ctx.state.profileId;
 
     try {
-        await ctx.reply('⏳ Собираю статистику...');
+        await beginChatResponse(ctx);
+        await replyWithTracking(ctx, '⏳ Собираю статистику...', buildMainMenuKeyboard());
 
         // Получаем данные за последние 4 недели
         const endDate = new Date();
@@ -22,10 +33,8 @@ export async function statsCommand(ctx) {
         });
 
         if (!sessions || sessions.length === 0) {
-            await ctx.reply(
-                '📊 Пока нет данных для статистики.\n\n' +
-                'Начни тренироваться и отчитывайся о выполнении — я буду отслеживать твой прогресс!'
-            );
+            await beginChatResponse(ctx);
+            await replyWithTracking(ctx, buildPrimerMessage(), { parse_mode: 'Markdown', ...buildMainMenuKeyboard() });
             return;
         }
 
@@ -33,19 +42,21 @@ export async function statsCommand(ctx) {
         const stats = calculateStats(sessions);
         const statsMessage = formatStatsMessage(stats);
 
-        const keyboard = Markup.inlineKeyboard([
+        const keyboard = withMainMenuButton([
             [Markup.button.callback('📈 Подробная аналитика', 'stats_detailed')],
             [Markup.button.callback('🏆 Достижения', 'stats_achievements')],
         ]);
 
-        await ctx.reply(statsMessage, { parse_mode: 'Markdown', ...keyboard });
+        await beginChatResponse(ctx);
+        await replyWithTracking(ctx, statsMessage, { parse_mode: 'Markdown', ...keyboard });
 
         // Записываем метрику просмотра статистики
         await db.recordMetric(profileId, 'stats_viewed', 1, 'count');
 
     } catch (error) {
         console.error('Error in stats command:', error);
-        await ctx.reply('😔 Не удалось загрузить статистику. Попробуй позже.');
+        await beginChatResponse(ctx);
+        await replyWithTracking(ctx, '😔 Не удалось загрузить статистику. Попробуй позже.', buildMainMenuKeyboard());
     }
 }
 
@@ -153,17 +164,33 @@ function formatStatsMessage(stats) {
 export async function statsDetailedCallback(ctx) {
     await ctx.answerCbQuery();
 
-    await ctx.reply(
-        '📈 **Подробная аналитика**\n\n' +
-        'Эта функция будет доступна в WebApp.\n\n' +
-        'Там ты увидишь:\n' +
-        '• Графики прогресса по упражнениям\n' +
-        '• Динамику объёма тренировок\n' +
-        '• Тренды RPE\n' +
-        '• История достижений\n\n' +
-        '🚧 Раздел в разработке',
-        { parse_mode: 'Markdown' }
-    );
+    const profileId = ctx.state.profileId;
+
+    try {
+        await ctx.deleteMessage();
+    } catch (error) {
+        // ignore
+    }
+
+    try {
+        const endDate = new Date();
+        const startDate = subDays(endDate, 28);
+
+        const [volumeTrend, rpeDistribution, adherence] = await Promise.all([
+            db.getVolumeTrend(profileId, startDate),
+            db.getRpeDistribution(profileId, startDate),
+            db.getAdherenceSummary(profileId),
+        ]);
+
+        const message = formatDetailedAnalytics(volumeTrend, rpeDistribution, adherence);
+
+        await beginChatResponse(ctx);
+        await replyWithTracking(ctx, message, { parse_mode: 'Markdown', ...buildMainMenuKeyboard() });
+    } catch (error) {
+        console.error('Failed to load detailed stats:', error);
+        await beginChatResponse(ctx);
+        await replyWithTracking(ctx, '😔 Не удалось собрать подробную аналитику. Попробуй позже.', buildMainMenuKeyboard());
+    }
 }
 
 /**
@@ -175,11 +202,18 @@ export async function statsAchievementsCallback(ctx) {
     const profileId = ctx.state.profileId;
 
     try {
-        // Получаем достижения из БД (будет реализовано позже)
-        const achievements = []; // await getAchievements(profileId);
+        try {
+            await ctx.deleteMessage();
+        } catch (error) {
+            // Сообщение уже могло быть удалено
+        }
+
+        await beginChatResponse(ctx);
+
+        const achievements = await db.getAchievements(profileId, { limit: 10 });
 
         if (achievements.length === 0) {
-            await ctx.reply(
+            await replyWithTracking(ctx,
                 '🏆 **Достижения**\n\n' +
                 'Пока нет достижений.\n\n' +
                 'Продолжай тренироваться, и они появятся!\n\n' +
@@ -188,21 +222,76 @@ export async function statsAchievementsCallback(ctx) {
                 '• Серия 7 дней 🔥\n' +
                 '• Месяц без пропусков 💎\n' +
                 '• Личный рекорд 🏅',
-                { parse_mode: 'Markdown' }
+                { parse_mode: 'Markdown', ...buildMainMenuKeyboard() }
             );
         } else {
             let message = '🏆 **Твои достижения**\n\n';
             achievements.forEach(ach => {
-                message += `${ach.emoji} ${ach.title}\n`;
-                message += `   ${ach.description}\n\n`;
+                const date = ach.awarded_at
+                    ? format(new Date(ach.awarded_at), 'd MMMM', { locale: ru })
+                    : null;
+                message += `${ach.emoji || '✅'} ${ach.title}\n`;
+                if (ach.description) {
+                    message += `   ${ach.description}\n`;
+                }
+                if (date) {
+                    message += `   Получено: ${date}\n`;
+                }
+                message += '\n';
             });
-            await ctx.reply(message, { parse_mode: 'Markdown' });
+            await replyWithTracking(ctx, message, { parse_mode: 'Markdown', ...buildMainMenuKeyboard() });
         }
 
     } catch (error) {
         console.error('Error showing achievements:', error);
-        await ctx.reply('😔 Не удалось загрузить достижения.');
+        await beginChatResponse(ctx);
+        await replyWithTracking(ctx, '😔 Не удалось загрузить достижения.', buildMainMenuKeyboard());
     }
+}
+
+function buildPrimerMessage() {
+    const overviewKeys = ['pullups', 'pushups', 'squats'];
+    const items = overviewKeys
+        .map(key => ({ key, data: getProgressionOverview(key) }))
+        .filter(item => item.data);
+
+    let message = '📊 **Пока нет данных для статистики**\n\n';
+    message += 'Я веду историю, как только появится первая отметка о тренировке.\n\n';
+
+    if (items.length > 0) {
+        message += 'Базовая программа строится на прогрессиях:\n';
+        message += items.map(({ key, data }) => {
+            const label = EXERCISE_LABELS[key] || key;
+            return `• ${label}: ${data.startLevel} → ${data.peakLevel} (${data.totalSteps} шагов)`;
+        }).join('\n');
+        message += '\n\n';
+    }
+
+    message += 'Отправь первый отчёт — и я покажу регулярность, RPE и серию тренировок.';
+    return message;
+}
+
+function formatDetailedAnalytics(volumeTrend, rpeDistribution, adherence) {
+    const chartPoints = volumeTrend.chart.slice(-5).map(point => {
+        const dateLabel = format(new Date(point.date), 'd MMM', { locale: ru });
+        return `• ${dateLabel}: объём ${point.volume}`;
+    }).join('\n');
+
+    const heavyShare = rpeDistribution.summary.heavy_share;
+    const lightShare = rpeDistribution.summary.light_share;
+
+    const message =
+        '📈 **Подробная аналитика**\n\n' +
+        'Объём за последние 4 недели:\n' +
+        (chartPoints || '— данных пока недостаточно') + '\n\n' +
+        `Средний объём за тренировку: ${volumeTrend.summary.average_volume}\n` +
+        `Всего тренировок за период: ${volumeTrend.summary.period_sessions}\n\n` +
+        'RPE по ощущениям:\n' +
+        rpeDistribution.chart.map(bucket => `• ${bucket.label}: ${bucket.value}`).join('\n') + '\n\n' +
+        `Тяжёлые сессии: ${heavyShare}% • Лёгкие: ${lightShare}%\n\n` +
+        `Регулярность за месяц: ${adherence.adherence_percent}% (из ${adherence.total_sessions} тренировок)`;
+
+    return message;
 }
 
 export default {

@@ -25,11 +25,11 @@ server/
 ├── config/                # Конфигурация
 │   └── env.js            # Переменные окружения
 ├── supabase/              # Supabase ресурсы
-│   ├── migrations/       # SQL миграции
-│   │   └── 20240101000000_initial_schema.sql
+│   ├── migrations/       # SQL миграции (инициализация + обновления)
 │   └── functions/        # Edge Functions
-│       ├── update_plan/  # Обновление плана
-│       └── notify_daily/ # Ежедневные уведомления
+│       ├── update_plan/      # Обновление плана
+│       ├── notify_daily/     # Ежедневные уведомления
+│       └── update_settings/  # Применение настроек
 ├── package.json
 └── .env                  # Переменные окружения (не в git)
 ```
@@ -37,12 +37,19 @@ server/
 ## Установка
 
 ```bash
+cd server
 npm install
 ```
 
 ## Переменные окружения
 
 Скопируйте `.env.example` в `.env` и заполните:
+
+```bash
+cp .env.example .env
+```
+
+Затем укажите значения переменных:
 
 ```bash
 # Telegram Bot Token (от @BotFather)
@@ -58,6 +65,7 @@ SUPABASE_SERVICE_KEY=your_service_key
 # App settings
 NODE_ENV=development
 PORT=3000
+WEBAPP_URL=https://your-webapp-hosting.example
 ```
 
 ## Запуск
@@ -82,6 +90,7 @@ npm start
 | `/report` | Отчитаться о тренировке |
 | `/stats` | Посмотреть прогресс |
 | `/settings` | Настройки уведомлений |
+| `/menu` | Вернуться в главное меню |
 
 ## Архитектура
 
@@ -111,6 +120,12 @@ Telegram → Bot → Middleware → Command Handler → Service → Supabase
 - Расчёт прогрессий упражнений
 - Принятие решений: advance/hold/regress
 - Анализ трендов прогресса
+
+#### Static plan helpers (`services/staticPlan.js`)
+- Статические прогрессии и советы по технике
+- Каталог упражнений для WebApp и fallback-планов
+
+HTTP API дополняется маршрутом `/v1/exercises/*`, который отдаёт каталог прогрессий и историю выполнения.
 
 ### База данных
 
@@ -147,6 +162,19 @@ supabase functions deploy update_plan
 Deploy:
 ```bash
 supabase functions deploy notify_daily
+```
+
+### update_settings
+Применяет изменения настроек профиля и управляет паузой уведомлений.
+
+Deploy:
+```bash
+supabase functions deploy update_settings
+```
+
+Запуск локально (пример для update_plan):
+```bash
+supabase functions serve update_plan --env-file ../.env.local
 ```
 
 Настройка cron:

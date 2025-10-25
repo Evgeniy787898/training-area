@@ -1,4 +1,5 @@
 import { db } from '../../infrastructure/supabase.js';
+import { recordUserMessage } from '../utils/chat.js';
 
 /**
  * Middleware для аутентификации пользователя
@@ -103,6 +104,25 @@ export async function loggingMiddleware(ctx, next) {
                     command: ctx.message?.text?.split(' ')[0],
                 }
             );
+
+            if (ctx.updateType === 'message' && ctx.message?.text) {
+                await recordUserMessage(ctx.state.profileId, {
+                    direction: 'in',
+                    message_id: ctx.message.message_id,
+                    chat_id: ctx.chat?.id,
+                    text: ctx.message.text,
+                    timestamp: new Date().toISOString(),
+                });
+            } else if (ctx.updateType === 'callback_query' && ctx.callbackQuery?.data) {
+                await recordUserMessage(ctx.state.profileId, {
+                    direction: 'in',
+                    type: 'callback',
+                    data: ctx.callbackQuery.data,
+                    message_id: ctx.callbackQuery.message?.message_id,
+                    chat_id: ctx.chat?.id,
+                    timestamp: new Date().toISOString(),
+                });
+            }
         }
     }
 }

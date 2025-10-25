@@ -6,6 +6,7 @@ const Navigation = ({ activeTab, onTabChange }) => {
         { id: 'week', label: 'Неделя', icon: '📆' },
         { id: 'report', label: 'Отчёт', icon: '📝' },
         { id: 'progress', label: 'Прогресс', icon: '📊' },
+        { id: 'exercises', label: 'Упражнения', icon: '🏋️' },
         { id: 'settings', label: 'Настройки', icon: '⚙️' },
     ];
 
@@ -16,6 +17,7 @@ const Navigation = ({ activeTab, onTabChange }) => {
                     key={tab.id}
                     className={`nav-tab ${activeTab === tab.id ? 'active' : ''}`}
                     onClick={() => onTabChange(tab.id)}
+                    aria-current={activeTab === tab.id ? 'page' : undefined}
                 >
                     <span className="nav-icon">{tab.icon}</span>
                     <span className="nav-label">{tab.label}</span>
