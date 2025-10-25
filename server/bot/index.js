@@ -16,6 +16,19 @@ const CONVERSATION_STATE_KEY = 'ai_chat_history';
 const HISTORY_LIMIT = 12;
 const HISTORY_TTL_MS = 48 * 60 * 60 * 1000; // 48 часов
 
+const COMMAND_PREFIXES = ['тренер', 'босс', 'trainer', 'boss', 'coach'];
+const COMMAND_PREFIX_SET = new Set(COMMAND_PREFIXES.map(prefix => prefix.toLowerCase()));
+const LEADING_MARKERS_REGEX = /^[\s\-–—]+/u;
+const POST_PREFIX_TRIM_REGEX = /^[\s,!:;?.-]+/u;
+const DEFAULT_FALLBACK_MESSAGE =
+    '⚠️ Не удалось обработать запрос. Используй /webapp, чтобы продолжить работу в приложении.';
+const CHAT_PROGRESS_MESSAGES = [
+    'Думаю, что вам ответить… 🤔',
+    'Складываю факты и шутки в единый ответ… 🧩',
+    'Подмешиваю иронию к фактчекингу… ☕️',
+    'Прокручиваю базу знаний в поисках идеальной реплики… 📚',
+];
+
 console.log('🤖 Initializing Training Bot...');
 
 const bot = new Telegraf(config.telegram.botToken);
@@ -37,6 +50,16 @@ bot.start(async (ctx) => {
     await replyWithTracking(ctx, greeting, { disable_web_page_preview: true });
 });
 
+bot.command('webapp', async ctx => {
+    const profileId = ctx.state.profileId;
+    const progressMessage = await sendProgressStatus(ctx, 'command');
+    const history = await loadHistory(profileId);
+    const { message, options } = buildOpenWebAppResponse(null);
+
+    await sendFinalReply(ctx, progressMessage, message, options);
+    await saveHistory(profileId, history, '/webapp', message, 'open_webapp');
+});
+
 bot.on('text', async (ctx, next) => {
     const text = ctx.message?.text?.trim();
 
@@ -45,37 +68,60 @@ bot.on('text', async (ctx, next) => {
         return;
     }
 
+    const { mode, payload } = detectInteractionMode(text);
     const profileId = ctx.state.profileId;
     const profile = ctx.state.profile;
 
+    const progressMessage = await sendProgressStatus(ctx, mode);
     const history = await loadHistory(profileId);
 
-    let decision = null;
-    try {
-        decision = await aiCommandRouter.interpret({
+    if (mode === 'command') {
+        const messageForRouter = payload || text;
+
+        let decision = null;
+        try {
+            decision = await aiCommandRouter.interpret({
+                profile,
+                message: messageForRouter,
+                history,
+            });
+        } catch (error) {
+            console.error('AI command router failed:', error);
+        }
+
+        if (decision?.needs_clarification && decision.clarification_question) {
+            await sendFinalReply(ctx, progressMessage, decision.clarification_question, {
+                disable_web_page_preview: true,
+            });
+            await saveHistory(profileId, history, text, decision.clarification_question, decision.intent);
+            await next();
+            return;
+        }
+
+        if (decision?.intent === 'open_webapp') {
+            const { message, options } = buildOpenWebAppResponse(decision?.assistant_reply);
+            await sendFinalReply(ctx, progressMessage, message, options);
+            await saveHistory(profileId, history, text, message, decision.intent);
+            await next();
+            return;
+        }
+
+        const assistantReply = await resolveAssistantReply(decision, {
             profile,
-            message: text,
-            history,
+            message: messageForRouter,
         });
-    } catch (error) {
-        console.error('AI command router failed:', error);
-    }
 
-    if (decision?.needs_clarification && decision.clarification_question) {
-        await replyWithTracking(ctx, decision.clarification_question, { disable_web_page_preview: true });
-        await saveHistory(profileId, history, text, null, decision.intent);
+        const finalMessage = assistantReply || DEFAULT_FALLBACK_MESSAGE;
+        await sendFinalReply(ctx, progressMessage, finalMessage, { disable_web_page_preview: true });
+        await saveHistory(profileId, history, text, finalMessage, decision?.intent || 'fallback');
+        await next();
         return;
     }
 
-    if (decision?.intent === 'open_webapp') {
-        const assistantMessage = await handleOpenWebApp(ctx, decision?.assistant_reply);
-        await saveHistory(profileId, history, text, assistantMessage, decision.intent);
-        return;
-    }
-
-    const assistantReply = await resolveAssistantReply(decision, { profile, message: text });
-    await replyWithTracking(ctx, assistantReply, { disable_web_page_preview: true });
-    await saveHistory(profileId, history, text, assistantReply, decision?.intent || 'fallback');
+    const assistantReply =
+        (await resolveAssistantReply(null, { profile, message: text })) || DEFAULT_FALLBACK_MESSAGE;
+    await sendFinalReply(ctx, progressMessage, assistantReply, { disable_web_page_preview: true });
+    await saveHistory(profileId, history, text, assistantReply, 'conversation');
 
     await next();
 });
@@ -103,10 +149,10 @@ async function resolveAssistantReply(decision, { profile, message }) {
         console.error('Conversation reply failed:', error);
     }
 
-    return 'Поймал запрос, но пока не понял контекст. Расскажи подробнее, что хочешь сделать, или попроси открыть приложение.';
+    return 'Поймал запрос, но пока не понял контекст. Расскажи подробнее, что хочешь сделать, или воспользуйся /webapp, чтобы продолжить в приложении.';
 }
 
-async function handleOpenWebApp(ctx, aiMessage) {
+function buildOpenWebAppResponse(aiMessage) {
     const message =
         formatAssistantReply(aiMessage) || 'Готов открыть панель. Нажми на кнопку ниже, чтобы запустить приложение.';
 
@@ -115,19 +161,19 @@ async function handleOpenWebApp(ctx, aiMessage) {
             Markup.button.webApp('🚀 Открыть приложение', config.app.webAppUrl),
         ]);
 
-        await replyWithTracking(ctx, message, {
-            ...keyboard,
-            disable_web_page_preview: true,
-        });
-    } else {
-        await replyWithTracking(
-            ctx,
-            `${message}\n\nURL WebApp не настроен. Добавь переменную окружения WEBAPP_URL.`,
-            { disable_web_page_preview: true }
-        );
+        return {
+            message,
+            options: {
+                ...keyboard,
+                disable_web_page_preview: true,
+            },
+        };
     }
 
-    return message;
+    return {
+        message: `${message}\n\nURL WebApp не настроен. Добавь переменную окружения WEBAPP_URL.`,
+        options: { disable_web_page_preview: true },
+    };
 }
 
 function formatAssistantReply(text) {
@@ -153,6 +199,54 @@ async function loadHistory(profileId) {
     } catch (error) {
         console.error('Failed to load conversation history:', error);
         return [];
+    }
+}
+
+function detectInteractionMode(text) {
+    const trimmed = text.trim();
+    const sanitized = trimmed.replace(LEADING_MARKERS_REGEX, '');
+
+    const prefixMatch = sanitized.match(/^[^\s,!:;?.-]+/u);
+    if (!prefixMatch) {
+        return { mode: 'chat', payload: trimmed };
+    }
+
+    const normalized = prefixMatch[0].toLowerCase();
+    if (!COMMAND_PREFIX_SET.has(normalized)) {
+        return { mode: 'chat', payload: trimmed };
+    }
+
+    const remainder = sanitized.slice(prefixMatch[0].length);
+    const payload = remainder.replace(POST_PREFIX_TRIM_REGEX, '').trim();
+
+    return { mode: 'command', payload };
+}
+
+async function sendProgressStatus(ctx, mode) {
+    const statusText =
+        mode === 'command'
+            ? 'Выполняю команды ⏳'
+            : CHAT_PROGRESS_MESSAGES[Math.floor(Math.random() * CHAT_PROGRESS_MESSAGES.length)];
+
+    try {
+        return await ctx.reply(statusText, { disable_notification: true });
+    } catch (error) {
+        console.error('Failed to send progress status:', error);
+        return null;
+    }
+}
+
+async function sendFinalReply(ctx, progressMessage, text, options = {}) {
+    await replyWithTracking(ctx, text, options);
+
+    if (progressMessage && ctx.chat) {
+        try {
+            await ctx.telegram.deleteMessage(ctx.chat.id, progressMessage.message_id);
+        } catch (error) {
+            if (error?.response?.error_code !== 400) {
+                console.warn('Failed to delete progress message:', error);
+            }
+        }
     }
 }
 
@@ -200,6 +294,9 @@ async function saveHistory(profileId, previousHistory, userMessage, assistantMes
 async function startBot() {
     try {
         await bot.telegram.deleteWebhook();
+        await bot.telegram.setMyCommands([
+            { command: 'webapp', description: 'Открыть приложение' },
+        ]);
 
         console.log('✅ Bot configuration:');
         console.log('   - Polling mode: enabled');
