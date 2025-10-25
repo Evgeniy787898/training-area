@@ -5,6 +5,7 @@ import WeekPlanView from './pages/WeekPlanView';
 import ReportView from './pages/ReportView';
 import ProgressView from './pages/ProgressView';
 import SettingsView from './pages/SettingsView';
+import ExercisesView from './pages/ExercisesView';
 import SkeletonCard from './components/SkeletonCard';
 import ErrorState from './components/ErrorState';
 import Toast from './components/Toast';
@@ -88,6 +89,8 @@ function App() {
                 return <ReportView />;
             case 'progress':
                 return <ProgressView />;
+            case 'exercises':
+                return <ExercisesView />;
             case 'settings':
                 return <SettingsView />;
             default:

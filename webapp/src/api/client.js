@@ -54,6 +54,8 @@ export const apiClient = {
         return request(`/v1/reports/${slug}${suffix}`);
     },
     getAchievements: () => request('/v1/achievements'),
+    getExerciseCatalog: () => request('/v1/exercises/catalog'),
+    getExerciseHistory: exerciseKey => request(`/v1/exercises/${encodeURIComponent(exerciseKey)}/history`),
 };
 
 export default apiClient;

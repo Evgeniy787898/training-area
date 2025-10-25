@@ -4,6 +4,7 @@ import { format, addDays, startOfWeek } from 'date-fns';
 import ru from 'date-fns/locale/ru/index.js';
 import { beginChatResponse, replyWithTracking } from '../utils/chat.js';
 import { buildDefaultWeekPlan } from '../../services/staticPlan.js';
+import { withMainMenuButton } from '../utils/menu.js';
 
 const PLAN_CACHE_STATE = 'ui_cached_plan';
 
@@ -54,7 +55,7 @@ export async function planCommand(ctx) {
             }
         }
 
-        const keyboard = Markup.inlineKeyboard([
+        const keyboard = withMainMenuButton([
             [Markup.button.callback('📋 Сегодня подробнее', 'plan_today')],
         ]);
 
@@ -108,7 +109,7 @@ export async function planTodayCallback(ctx) {
         const session = sessions[0];
         const detailedMessage = formatDetailedSession(session);
 
-        const keyboard = Markup.inlineKeyboard([
+        const keyboard = withMainMenuButton([
             [Markup.button.callback('✅ Начать тренировку', `session_start_${session.id}`)],
             [Markup.button.callback('🔄 Перенести', `session_reschedule_${session.id}`)],
         ]);
@@ -154,7 +155,7 @@ async function sendFallbackPlan(ctx, profile, weekStart, weekEnd, today) {
 
     message += `План построен по базовой программе прогрессий и адаптируется под доступное оборудование.\n`;
 
-    const keyboard = Markup.inlineKeyboard([
+    const keyboard = withMainMenuButton([
         [Markup.button.callback('📋 Сегодня подробнее', 'plan_today')],
     ]);
 

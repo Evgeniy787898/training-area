@@ -44,6 +44,7 @@ import {
     rescheduleCancelCallback,
     startNaturalRescheduleFlow
 } from './commands/reschedule.js';
+import { mainMenuCallbackId } from './utils/menu.js';
 
 console.log('🤖 Initializing Training Bot...');
 
@@ -63,6 +64,7 @@ bot.command('plan', planCommand);
 bot.command('report', reportCommand);
 bot.command('stats', statsCommand);
 bot.command('settings', settingsCommand);
+bot.command('menu', startCommand);
 
 // Register callback queries (inline buttons)
 
@@ -91,6 +93,13 @@ bot.action(/^set_goal_/, setGoalCallback);
 bot.action('settings_equipment', settingsEquipmentCallback);
 bot.action(/^equip_toggle_/, toggleEquipmentCallback);
 bot.action('equip_save', settingsEquipmentSaveCallback);
+
+bot.action(mainMenuCallbackId(), async (ctx) => {
+    if (ctx.updateType === 'callback_query') {
+        await ctx.answerCbQuery('Главное меню');
+    }
+    await startCommand(ctx);
+});
 
 // Reschedule callbacks
 bot.action(/^session_reschedule_/, sessionRescheduleCallback);

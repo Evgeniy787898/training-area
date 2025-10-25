@@ -186,6 +186,62 @@
 }
 ```
 
+### `GET /v1/exercises/catalog`
+
+Каталог прогрессий упражнений с последней отметкой пользователя (если есть данные).
+
+**Response 200**
+
+```json
+{
+  "items": [
+    {
+      "key": "pullups",
+      "title": "Подтягивания",
+      "focus": "Спина и хват",
+      "description": "10-ступенчатая прогрессия от вертикальной тяги до подтягиваний на одной руке.",
+      "cue": "Локти направлены вниз, корпус жёсткий.",
+      "levels": [
+        { "id": "1.1", "title": "Вертикальные подтягивания", "sets": 1, "reps": 10 },
+        { "id": "1.2", "title": "Вертикальные подтягивания", "sets": 2, "reps": 20 }
+      ],
+      "latest_progress": {
+        "level": "3.2",
+        "decision": "advance",
+        "session_date": "2024-03-28",
+        "updated_at": "2024-03-28T19:32:04.125Z"
+      }
+    }
+  ],
+  "generated_at": "2024-03-31T20:00:00.000Z"
+}
+```
+
+### `GET /v1/exercises/{exerciseKey}/history`
+
+История прогрессии конкретного упражнения (до 20 записей).
+
+**Response 200**
+
+```json
+{
+  "exercise": "pullups",
+  "items": [
+    {
+      "session_date": "2024-03-28",
+      "level_target": "3.2",
+      "level_result": "3.3",
+      "volume_target": 30,
+      "volume_actual": 36,
+      "rpe": 7,
+      "decision": "advance",
+      "notes": "Готов перейти на усложнение",
+      "recorded_at": "2024-03-28T19:32:04.125Z"
+    }
+  ]
+}
+```
+
 ---
 
 Все перечисленные эндпоинты покрываются логированием в таблицу `observability_events` (категории: `plan_viewed`, `session_marked_done`, `preferences_updated`, `report_requested`, `achievements_viewed`). Ошибки следует инспектировать по `trace_id`.

@@ -1,6 +1,7 @@
 import { Markup } from 'telegraf';
 import { db } from '../../infrastructure/supabase.js';
 import { beginChatResponse, replyWithTracking } from '../utils/chat.js';
+import { buildMainMenuKeyboard, withMainMenuButton } from '../utils/menu.js';
 
 const EQUIPMENT_STATE_KEY = 'settings_equipment_draft';
 const EQUIPMENT_OPTIONS = [
@@ -25,11 +26,8 @@ export async function settingsCommand(ctx) {
     const profile = ctx.state.profile;
     const settingsMessage = formatSettingsMessage(profile);
 
-    const keyboard = Markup.inlineKeyboard([
+    const keyboard = withMainMenuButton([
         [Markup.button.callback('⏰ Изменить время уведомлений', 'settings_notification_time')],
-        [Markup.button.callback('🌍 Изменить часовой пояс', 'settings_timezone')],
-        [Markup.button.callback('🎯 Изменить цели', 'settings_goals')],
-        [Markup.button.callback('🏋️ Изменить оборудование', 'settings_equipment')],
         [Markup.button.callback('🔕 Пауза уведомлений', 'settings_pause_notifications')],
     ]);
 
@@ -59,6 +57,8 @@ function formatSettingsMessage(profile) {
         : '✅ Активны';
     message += `**Уведомления:** ${notificationStatus}\n`;
 
+    message += '\n📲 Другие настройки (цели, оборудование, часовой пояс) доступны в WebApp.';
+
     return message;
 }
 
@@ -69,7 +69,7 @@ export async function settingsNotificationTimeCallback(ctx) {
         `⏰ **Время уведомлений**\n\n` +
         `Выбери удобное время для ежедневных уведомлений:`;
 
-    const keyboard = Markup.inlineKeyboard([
+    const keyboard = withMainMenuButton([
         [Markup.button.callback('🌅 06:00', 'set_time_06:00')],
         [Markup.button.callback('🌅 07:00', 'set_time_07:00')],
         [Markup.button.callback('☀️ 08:00', 'set_time_08:00')],
@@ -123,7 +123,7 @@ export async function settingsTimezoneCallback(ctx) {
         `🌍 **Часовой пояс**\n\n` +
         `Выбери свой часовой пояс:`;
 
-    const keyboard = Markup.inlineKeyboard([
+    const keyboard = withMainMenuButton([
         [Markup.button.callback('🇷🇺 Москва (MSK, UTC+3)', 'set_tz_Europe/Moscow')],
         [Markup.button.callback('🇷🇺 Екатеринбург (UTC+5)', 'set_tz_Asia/Yekaterinburg')],
         [Markup.button.callback('🇷🇺 Новосибирск (UTC+7)', 'set_tz_Asia/Novosibirsk')],
@@ -209,7 +209,7 @@ export async function settingsBackCallback(ctx) {
 export async function settingsGoalsCallback(ctx) {
     await ctx.answerCbQuery();
 
-    const keyboard = Markup.inlineKeyboard([
+    const keyboard = withMainMenuButton([
         ...GOAL_OPTIONS.map(option => [
             Markup.button.callback(`${option.icon} ${option.label}`, `set_goal_${option.key}`),
         ]),
@@ -349,7 +349,7 @@ function resolveEquipmentLabel(key) {
 }
 
 async function renderEquipmentEditor(ctx, selected) {
-    const keyboard = Markup.inlineKeyboard([
+    const keyboard = withMainMenuButton([
         ...EQUIPMENT_OPTIONS.map(option => [
             Markup.button.callback(
                 `${selected.includes(option.key) ? '✅' : '▫️'} ${option.icon} ${option.label}`,

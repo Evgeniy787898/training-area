@@ -65,6 +65,7 @@ SUPABASE_SERVICE_KEY=your_service_key
 # App settings
 NODE_ENV=development
 PORT=3000
+WEBAPP_URL=https://your-webapp-hosting.example
 ```
 
 ## Запуск
@@ -89,6 +90,7 @@ npm start
 | `/report` | Отчитаться о тренировке |
 | `/stats` | Посмотреть прогресс |
 | `/settings` | Настройки уведомлений |
+| `/menu` | Вернуться в главное меню |
 
 ## Архитектура
 
@@ -118,6 +120,12 @@ Telegram → Bot → Middleware → Command Handler → Service → Supabase
 - Расчёт прогрессий упражнений
 - Принятие решений: advance/hold/regress
 - Анализ трендов прогресса
+
+#### Static plan helpers (`services/staticPlan.js`)
+- Статические прогрессии и советы по технике
+- Каталог упражнений для WebApp и fallback-планов
+
+HTTP API дополняется маршрутом `/v1/exercises/*`, который отдаёт каталог прогрессий и историю выполнения.
 
 ### База данных
 

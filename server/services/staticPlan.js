@@ -16,6 +16,39 @@ const EXERCISE_CUES = {
     bridge: 'Дышим плавно, раскрываем грудной отдел.',
 };
 
+const EXERCISE_METADATA = {
+    pullups: {
+        title: 'Подтягивания',
+        focus: 'Спина и хват',
+        description: '10-ступенчатая прогрессия от вертикальной тяги до подтягиваний на одной руке.',
+    },
+    squats: {
+        title: 'Приседания',
+        focus: 'Ноги и баланс',
+        description: 'Постепенно прокачиваем силу ног от простых вариантов до пистолетиков.',
+    },
+    pushups: {
+        title: 'Отжимания',
+        focus: 'Грудь и трицепс',
+        description: 'От лёгких отжиманий от стены до стойки на руках без опоры.',
+    },
+    legRaises: {
+        title: 'Кор',
+        focus: 'Пресс и стабилизация',
+        description: 'Укрепляем корпус от подъёмов коленей до выходов в стойку.',
+    },
+    handstand: {
+        title: 'Стойка на руках',
+        focus: 'Баланс и плечи',
+        description: 'Учимся уверенно держать стойку и контролировать баланс.',
+    },
+    bridge: {
+        title: 'Мост',
+        focus: 'Подвижность и сила спины',
+        description: 'Развиваем гибкость и силу задней цепи от простых мостиков до флип-флопа.',
+    },
+};
+
 const PROGRESSION_DATA = {
     pullups: [
         { level: '1.1', title: 'Вертикальные подтягивания', sets: 1, reps: 10 },
@@ -397,7 +430,27 @@ export function getProgressionOverview(exerciseKey) {
     };
 }
 
+export function buildProgressionCatalog() {
+    return Object.entries(PROGRESSION_DATA).map(([key, levels]) => {
+        const meta = EXERCISE_METADATA[key] || {};
+        return {
+            key,
+            title: meta.title || key,
+            focus: meta.focus || 'Общая подготовка',
+            description: meta.description || null,
+            cue: EXERCISE_CUES[key] || null,
+            levels: levels.map(level => ({
+                id: level.level,
+                title: level.title,
+                sets: level.sets,
+                reps: level.reps,
+            })),
+        };
+    });
+}
+
 export default {
     buildDefaultWeekPlan,
     getProgressionOverview,
+    buildProgressionCatalog,
 };
