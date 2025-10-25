@@ -29,10 +29,14 @@ class ConversationService {
             });
 
             const raw = completion.choices?.[0]?.message?.content?.trim();
+            if (!raw) {
+                return this.buildUnavailableReply();
+            }
+
             return formatStructuredReply(raw);
         } catch (error) {
             console.error('Conversation reply failed:', error);
-            return null;
+            return this.buildUnavailableReply(error);
         }
     }
 
@@ -48,6 +52,15 @@ class ConversationService {
         const goal = profile.goals?.description || 'цель не указана';
 
         return `Контекст пользователя: цель — ${goal}, оборудование — ${(profile.equipment || ['только вес тела']).join(', ')}. Частота: ${frequency}.`;
+    }
+
+    buildUnavailableReply(error) {
+        if (config.app?.nodeEnv === 'development') {
+            const reason = error?.message ? ` Причина: ${error.message}` : '';
+            return `⚠️ AI-сервис временно недоступен. Проверь API-ключ и лимиты OpenAI.${reason}`;
+        }
+
+        return '⚠️ AI-сервис временно недоступен. Повтори запрос позже или открой WebApp командой /webapp.';
     }
 }
 
