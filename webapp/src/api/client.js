@@ -1,8 +1,20 @@
 const RAW_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || '';
-const DEV_PROFILE_ID = import.meta.env.VITE_DEV_PROFILE_ID?.trim() || null;
-const DEV_TELEGRAM_ID = import.meta.env.VITE_DEV_TELEGRAM_ID?.trim() || null;
-const DEV_AUTH_TOKEN = import.meta.env.VITE_DEV_AUTH_TOKEN?.trim() || null;
-const DEV_INIT_DATA = import.meta.env.VITE_DEV_INIT_DATA?.trim() || null;
+const PROFILE_ID_OVERRIDE =
+    import.meta.env.VITE_PROFILE_ID?.trim()
+    || import.meta.env.VITE_DEV_PROFILE_ID?.trim()
+    || null;
+const TELEGRAM_ID_OVERRIDE =
+    import.meta.env.VITE_TELEGRAM_ID?.trim()
+    || import.meta.env.VITE_DEV_TELEGRAM_ID?.trim()
+    || null;
+const AUTH_TOKEN_OVERRIDE =
+    import.meta.env.VITE_AUTH_TOKEN?.trim()
+    || import.meta.env.VITE_DEV_AUTH_TOKEN?.trim()
+    || null;
+const INIT_DATA_OVERRIDE =
+    import.meta.env.VITE_INIT_DATA?.trim()
+    || import.meta.env.VITE_DEV_INIT_DATA?.trim()
+    || null;
 
 function buildUrl(path) {
     if (!path) {
@@ -22,12 +34,23 @@ function buildUrl(path) {
     }
 }
 
-let telegramId = null;
-let telegramInitData = null;
+let telegramId = TELEGRAM_ID_OVERRIDE || null;
+let telegramInitData = INIT_DATA_OVERRIDE || null;
 
-export function configureClient({ telegramUser, initData }) {
-    telegramId = telegramUser?.id || null;
-    telegramInitData = initData || (typeof window !== 'undefined' ? window.Telegram?.WebApp?.initData || null : null);
+export function configureClient({ telegramUser, initData } = {}) {
+    if (telegramUser?.id) {
+        telegramId = telegramUser.id;
+    } else if (TELEGRAM_ID_OVERRIDE) {
+        telegramId = TELEGRAM_ID_OVERRIDE;
+    }
+
+    if (initData) {
+        telegramInitData = initData;
+    } else if (INIT_DATA_OVERRIDE) {
+        telegramInitData = INIT_DATA_OVERRIDE;
+    } else if (typeof window !== 'undefined') {
+        telegramInitData = window.Telegram?.WebApp?.initData || telegramInitData;
+    }
 }
 
 async function request(path, { method = 'GET', body, headers } = {}) {
@@ -42,19 +65,20 @@ async function request(path, { method = 'GET', body, headers } = {}) {
         init.headers.set('X-Telegram-Init-Data', telegramInitData);
     }
 
-    if (import.meta.env.DEV) {
-        if (DEV_PROFILE_ID) {
-            init.headers.set('X-Profile-Id', DEV_PROFILE_ID);
-        }
-        if (!telegramId && DEV_TELEGRAM_ID) {
-            init.headers.set('X-Telegram-Id', DEV_TELEGRAM_ID);
-        }
-        if (!telegramInitData && DEV_INIT_DATA) {
-            init.headers.set('X-Telegram-Init-Data', DEV_INIT_DATA);
-        }
-        if (DEV_AUTH_TOKEN) {
-            init.headers.set('X-Auth-Token', DEV_AUTH_TOKEN);
-        }
+    if (PROFILE_ID_OVERRIDE) {
+        init.headers.set('X-Profile-Id', PROFILE_ID_OVERRIDE);
+    }
+
+    if (!telegramId && TELEGRAM_ID_OVERRIDE) {
+        init.headers.set('X-Telegram-Id', TELEGRAM_ID_OVERRIDE);
+    }
+
+    if (!telegramInitData && INIT_DATA_OVERRIDE) {
+        init.headers.set('X-Telegram-Init-Data', INIT_DATA_OVERRIDE);
+    }
+
+    if (AUTH_TOKEN_OVERRIDE) {
+        init.headers.set('X-Auth-Token', AUTH_TOKEN_OVERRIDE);
     }
 
     if (body !== undefined) {

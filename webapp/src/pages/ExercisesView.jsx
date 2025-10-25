@@ -6,6 +6,8 @@ import ErrorState from '../components/ErrorState';
 import ExerciseCard from '../components/ExerciseCard';
 import { STATIC_EXERCISE_CATALOG } from '../services/staticCatalog';
 
+const STANDALONE_MODE = import.meta.env.VITE_STANDALONE_MODE === '1';
+
 const PROGRAMS = [
     { id: 'calisthenics', title: 'Калистеника', subtitle: 'Турник, собственный вес, мобильность' },
     { id: 'functional', title: 'Функциональный тренинг', subtitle: 'Скоро', locked: true },
@@ -161,7 +163,11 @@ const ExercisesView = () => {
                     </button>
                 </div>
                 {catalogState.fallback && (
-                    <p className="text-muted">Пока показываю демонстрационный каталог. Для синхронизации с Supabase открой WebApp из Telegram.</p>
+                    <p className="text-muted">
+                        {STANDALONE_MODE
+                            ? 'Каталог загружен из локальной копии. Проверь настройки доступа к Supabase, чтобы показать актуальные данные.'
+                            : 'Пока показываю демонстрационный каталог. Для синхронизации с Supabase открой WebApp из Telegram.'}
+                    </p>
                 )}
             </div>
 

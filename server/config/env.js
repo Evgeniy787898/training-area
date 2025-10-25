@@ -14,6 +14,10 @@ export const config = {
     openai: {
         apiKey: process.env.OPENAI_API_KEY,
         model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        maxConcurrency: parseInt(process.env.OPENAI_MAX_CONCURRENCY || '1', 10),
+        minIntervalMs: parseInt(process.env.OPENAI_MIN_INTERVAL_MS || '800', 10),
+        maxRetries: parseInt(process.env.OPENAI_MAX_RETRIES || '3', 10),
+        retryInitialDelayMs: parseInt(process.env.OPENAI_RETRY_INITIAL_DELAY_MS || '1000', 10),
     },
     supabase: {
         url: process.env.SUPABASE_URL,

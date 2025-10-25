@@ -6,6 +6,8 @@ import ErrorState from '../components/ErrorState';
 import { getStaticSessionForDate } from '../services/staticPlan';
 import { DEMO_REPORT_HINT } from '../services/demoData';
 
+const STANDALONE_MODE = import.meta.env.VITE_STANDALONE_MODE === '1';
+
 const initialFormState = {
     status: 'done',
     rpe: '7',
@@ -65,8 +67,10 @@ const ReportView = () => {
                     fallback: true,
                 });
                 showToast?.({
-                    title: 'Демо режим',
-                    message: 'Не получилось получить актуальную тренировку. Показан пример для заполнения.',
+                    title: STANDALONE_MODE ? 'Нет соединения с API' : 'Демо режим',
+                    message: STANDALONE_MODE
+                        ? 'Проверь авторизацию: без доступа к серверу показан пример для заполнения.'
+                        : 'Не получилось получить актуальную тренировку. Показан пример для заполнения.',
                     type: 'warning',
                     traceId: error.traceId,
                 });
@@ -117,9 +121,11 @@ const ReportView = () => {
 
         if (!state.session?.id) {
             showToast?.({
-                title: 'Демо режим',
-                message: 'В режиме предпросмотра отчёт не отправляется на сервер. Открой приложение из Telegram для реального отчёта.',
-                type: 'info',
+                title: STANDALONE_MODE ? 'Нет соединения с API' : 'Демо режим',
+                message: STANDALONE_MODE
+                    ? 'Сейчас нет соединения с сервером. Исправь токен доступа и повтори попытку.'
+                    : 'В режиме предпросмотра отчёт не отправляется на сервер. Открой приложение из Telegram для реального отчёта.',
+                type: 'warning',
             });
             return;
         }
