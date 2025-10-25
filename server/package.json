@@ -7,6 +7,7 @@
     "scripts": {
         "start": "node bot/index.js",
         "dev": "node --watch bot/index.js",
+        "dev:tunnel": "node scripts/dev-with-ngrok.mjs",
         "lint": "eslint .",
         "test": "node --test"
     },

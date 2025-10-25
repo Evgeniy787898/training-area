@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { addDays, format, startOfWeek } from 'date-fns';
+import { addDays, format, isValid, parseISO, startOfWeek } from 'date-fns';
 import { z } from 'zod';
 import { db } from '../../infrastructure/supabase.js';
 
@@ -39,15 +39,21 @@ function ensureSessionBelongsToProfile(session, profileId) {
 
 router.get('/today', async (req, res, next) => {
     try {
-        const today = format(new Date(), 'yyyy-MM-dd');
+        const targetDate = req.query.date ? parseISO(req.query.date) : new Date();
+        if (!isValid(targetDate)) {
+            return res.status(400).json({ error: 'invalid_date', message: 'Некорректная дата запроса' });
+        }
+
+        const dateKey = format(targetDate, 'yyyy-MM-dd');
+
         const sessions = await db.getTrainingSessions(req.profileId, {
-            startDate: today,
-            endDate: today,
+            startDate: dateKey,
+            endDate: dateKey,
         });
 
         if (!sessions?.length) {
-            const weekPlan = await db.getOrCreateFallbackWeekPlan(req.profile, req.profileId, new Date());
-            const session = weekPlan.sessions.find(item => item.date === today) || null;
+            const weekPlan = await db.getOrCreateFallbackWeekPlan(req.profile, req.profileId, targetDate);
+            const session = weekPlan.sessions.find(item => item.date === dateKey) || null;
 
             await db.logEvent(req.profileId, 'plan_viewed', 'info', {
                 scope: 'today',
@@ -61,6 +67,7 @@ router.get('/today', async (req, res, next) => {
         await db.logEvent(req.profileId, 'plan_viewed', 'info', {
             scope: 'today',
             source: 'database',
+            date: dateKey,
             trace_id: req.traceId,
         });
 

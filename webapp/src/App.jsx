@@ -1,18 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Navigation from './components/Navigation';
 import TodayView from './pages/TodayView';
-import WeekPlanView from './pages/WeekPlanView';
-import ReportView from './pages/ReportView';
-import ProgressView from './pages/ProgressView';
+import AnalyticsView from './pages/AnalyticsView';
 import SettingsView from './pages/SettingsView';
 import ExercisesView from './pages/ExercisesView';
-import LibraryView from './pages/LibraryView';
 import SkeletonCard from './components/SkeletonCard';
 import ErrorState from './components/ErrorState';
 import Toast from './components/Toast';
 import { AppProvider } from './context/AppContext';
 import { configureClient, apiClient } from './api/client';
 import { DEMO_PROFILE_SUMMARY } from './services/demoData';
+import StatusBadge from './components/StatusBadge';
 
 const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME || null;
 
@@ -126,16 +124,10 @@ function App() {
         switch (activeTab) {
             case 'today':
                 return <TodayView />;
-            case 'week':
-                return <WeekPlanView />;
-            case 'report':
-                return <ReportView />;
-            case 'progress':
-                return <ProgressView />;
+            case 'analytics':
+                return <AnalyticsView />;
             case 'exercises':
                 return <ExercisesView />;
-            case 'library':
-                return <LibraryView />;
             case 'settings':
                 return <SettingsView />;
             default:
@@ -162,26 +154,29 @@ function App() {
         profileSummary?.profile?.training_frequency ??
         profileSummary?.preferences?.training_frequency ??
         null;
-    const frequencyLabel = frequencyValue ? `${frequencyValue} трен/нед` : 'частота по умолчанию';
+    const frequencyLabel = frequencyValue ? `${frequencyValue} трен/нед` : '3 тренировки в неделю';
     const goalText =
         profileSummary?.profile?.preferences?.training_goal ||
         profileSummary?.profile?.goals?.description ||
         profileSummary?.highlights?.focus ||
-        'Функциональный тренинг';
-    const equipment =
-        profileSummary?.profile?.equipment ||
-        profileSummary?.equipment ||
-        profileSummary?.profile?.preferences?.equipment ||
-        [];
-    const equipmentLabel = Array.isArray(equipment) && equipment.length
-        ? equipment.join(', ')
-        : 'только вес тела';
+        'Калистеника';
     const upcomingSession = profileSummary?.upcoming_session;
     const upcomingDate = upcomingSession?.date ? new Date(upcomingSession.date) : null;
     const upcomingLabel = upcomingDate
-        ? upcomingDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })
-        : 'По плану';
-    const nextFocus = upcomingSession?.focus || profileSummary?.highlights?.next_goal || 'Прогрессия подстраивается автоматически';
+        ? upcomingDate.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })
+        : 'Подстрою расписание под тебя';
+    const upcomingTime = upcomingDate
+        ? upcomingDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+        : '— —';
+    const nextFocus = upcomingSession?.focus || profileSummary?.highlights?.next_goal || 'Прогрессия адаптируется автоматически';
+    const todayStatus = (() => {
+        if (!upcomingDate) {
+            return 'training';
+        }
+        const today = new Date();
+        const sameDay = upcomingDate.toDateString() === today.toDateString();
+        return sameDay ? 'training' : 'rest';
+    })();
 
     return (
         <AppProvider value={contextValue}>
@@ -189,16 +184,12 @@ function App() {
                 <header className="app-header">
                     <div className="header-top">
                         <div className="brand">
-                            <div className="brand-icon">💪</div>
+                            <div className="brand-icon">TZ</div>
                             <div>
-                                <h1>Training Bot</h1>
-                                <p className="brand-subtitle">персональный тренер в стиле Gemini</p>
+                                <h1>Tzona</h1>
                             </div>
                         </div>
-                        <div className="user-chip">
-                            {telegramUser ? `Привет, ${telegramUser.first_name}!` : 'Гость'}
-                            {demoMode && <span className="demo-chip">демо режим</span>}
-                        </div>
+                        <StatusBadge status={todayStatus} compact />
                     </div>
 
                     <div className="header-status">
@@ -217,24 +208,19 @@ function App() {
 
                     <div className="hero-grid">
                         <div className="hero-card">
-                            <span className="hero-label">Фокус</span>
-                            <span className="hero-value">{profileSummary?.highlights?.focus || goalText}</span>
-                            <span className="hero-meta">Цель — {profileSummary?.highlights?.next_goal || goalText}</span>
+                            <span className="hero-label">Программа в фокусе</span>
+                            <span className="hero-value">{goalText}</span>
+                            <span className="hero-meta">Следим за техникой и прогрессией</span>
                         </div>
                         <div className="hero-card">
-                            <span className="hero-label">Следующая сессия</span>
+                            <span className="hero-label">Следующая тренировка</span>
                             <span className="hero-value">{upcomingLabel}</span>
-                            <span className="hero-meta">{nextFocus}</span>
+                            <span className="hero-meta">{upcomingTime} · {nextFocus}</span>
                         </div>
                         <div className="hero-card">
-                            <span className="hero-label">Регулярность</span>
-                            <span className="hero-value">{adherenceLabel}</span>
-                            <span className="hero-meta">{frequencyLabel}</span>
-                        </div>
-                        <div className="hero-card">
-                            <span className="hero-label">Оборудование</span>
-                            <span className="hero-value">{equipmentLabel}</span>
-                            <span className="hero-meta">Настроим план под текущие условия</span>
+                            <span className="hero-label">Ритм недели</span>
+                            <span className="hero-value">{frequencyLabel}</span>
+                            <span className="hero-meta">Регулярность {adherenceLabel}</span>
                         </div>
                     </div>
                 </header>

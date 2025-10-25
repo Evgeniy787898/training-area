@@ -78,6 +78,18 @@ bot.on('text', async (ctx, next) => {
     if (mode === 'command') {
         const messageForRouter = payload || text;
 
+        const quickIntent = await handleQuickCommand(messageForRouter, ctx);
+        if (quickIntent) {
+            const { message: quickMessage, intent: quickIntentName, options: quickOptions } = quickIntent;
+            await sendFinalReply(ctx, progressMessage, quickMessage, {
+                disable_web_page_preview: true,
+                ...(quickOptions || {}),
+            });
+            await saveHistory(profileId, history, text, quickMessage, quickIntentName || 'quick_command');
+            await next();
+            return;
+        }
+
         let decision = null;
         try {
             decision = await aiCommandRouter.interpret({
@@ -200,6 +212,131 @@ async function loadHistory(profileId) {
         console.error('Failed to load conversation history:', error);
         return [];
     }
+}
+
+async function handleQuickCommand(message, ctx) {
+    const normalized = (message || '').trim().toLowerCase();
+    if (!normalized) {
+        return null;
+    }
+
+    if (isOpenAppCommand(normalized)) {
+        const { message: reply, options } = buildOpenWebAppResponse(null);
+        return { message: reply, intent: 'open_webapp', options };
+    }
+
+    if (asksForUpcomingWorkout(normalized)) {
+        const summary = await buildUpcomingSessionSummary(ctx.state.profileId, ctx.state.profile);
+        return { message: summary, intent: 'plan_today' };
+    }
+
+    if (asksToStartWorkout(normalized)) {
+        const summary = await buildWorkoutStartMessage(ctx.state.profileId, ctx.state.profile);
+        return { message: summary, intent: 'report_start' };
+    }
+
+    return null;
+}
+
+function isOpenAppCommand(text) {
+    return /(открой|запусти|кнопк|панел|webapp|приложение)/u.test(text);
+}
+
+function asksForUpcomingWorkout(text) {
+    return /(ближайш|следующ|когда|расписан|какая).*тренир|что\s+по\s+плану|что\s+там\s+с\s+тренировкой/u.test(text);
+}
+
+function asksToStartWorkout(text) {
+    return /(начать|запусти|приступить|старт).*тренир|поехали.*трен/u.test(text);
+}
+
+async function buildUpcomingSessionSummary(profileId, profile) {
+    try {
+        const today = new Date();
+        const weekPlan = await db.getOrCreateFallbackWeekPlan(profile, profileId, today);
+        const sessions = Array.isArray(weekPlan.sessions) ? weekPlan.sessions : [];
+        const nextSession = sessions
+            .map(session => ({
+                ...session,
+                dateObj: session.date ? new Date(session.date) : null,
+            }))
+            .filter(item => item.dateObj && item.dateObj >= new Date(today.toDateString()))
+            .sort((a, b) => a.dateObj - b.dateObj)[0];
+
+        if (!nextSession) {
+            return '💤 На этой неделе в плане нет тренировок. Попроси «Собери новый план», чтобы обновить график.';
+        }
+
+        const weekday = nextSession.dateObj.toLocaleDateString('ru-RU', {
+            weekday: 'long',
+        });
+        const calendar = nextSession.dateObj.toLocaleDateString('ru-RU', {
+            day: 'numeric',
+            month: 'long',
+        });
+
+        const focus = nextSession.focus || nextSession.session_type || 'Рабочая сессия';
+        const intensity = nextSession.rpe ? `RPE ${nextSession.rpe}` : 'умеренно';
+        const callToAction = 'Готов? Скажи «Начать тренировку», и я открою план в приложении.';
+
+        return [
+            `🏁 Ближайшая тренировка — ${weekday}, ${calendar}.`,
+            `Фокус: ${focus}. Темп: ${intensity}.`,
+            `В программе: ${summarizeExercises(nextSession.exercises)}.`,
+            callToAction,
+        ]
+            .filter(Boolean)
+            .join('\n');
+    } catch (error) {
+        console.error('Failed to build upcoming session summary:', error);
+        return '⚠️ Не нашёл ближайшую тренировку. Попробуй открыть панель командой /webapp.';
+    }
+}
+
+async function buildWorkoutStartMessage(profileId, profile) {
+    try {
+        const today = new Date();
+        const weekPlan = await db.getOrCreateFallbackWeekPlan(profile, profileId, today);
+        const sessions = Array.isArray(weekPlan.sessions) ? weekPlan.sessions : [];
+        const active = sessions.find(session => session.date === formatDateIso(today));
+
+        if (!active) {
+            return 'Сегодня в плане отдых. Если хочешь подвигаться, открой приложение и выбери мобильность или лёгкую сессию.';
+        }
+
+        return [
+            '🚦 Поехали! Вот твой чек-лист:',
+            `• Фокус: ${active.focus || active.session_type}.`,
+            `• Блоки: ${summarizeExercises(active.exercises)}.`,
+            '• Разминка 5 минут суставной гимнастики, заминка — дыхание 4-6-4.',
+            'Открой /webapp и нажми «Приступить к тренировке», чтобы запустить таймер и внести объём.',
+        ].join('\n');
+    } catch (error) {
+        console.error('Failed to build workout start message:', error);
+        return '⚠️ Не получилось загрузить план. Попроси «Открой приложение», чтобы продолжить там.';
+    }
+}
+
+function summarizeExercises(exercises) {
+    if (!Array.isArray(exercises) || exercises.length === 0) {
+        return 'разминаемся и работаем по ощущениям';
+    }
+
+    return exercises
+        .slice(0, 3)
+        .map(ex => {
+            const name = ex.name || ex.exercise_key || 'упражнение';
+            const target = ex.target || {};
+            const sets = target.sets ? `${target.sets}×` : '';
+            const reps = target.reps ? `${target.reps}` : target.duration_seconds ? `${Math.round(target.duration_seconds / 60)} мин` : '';
+            const volume = `${sets}${reps}`.replace(/×$/, '');
+            return volume ? `${name} ${volume}` : name;
+        })
+        .join(', ');
+}
+
+function formatDateIso(date) {
+    return date.toISOString().slice(0, 10);
 }
 
 function detectInteractionMode(text) {

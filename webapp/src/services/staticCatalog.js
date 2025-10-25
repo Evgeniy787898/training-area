@@ -1,6 +1,7 @@
 export const STATIC_EXERCISE_CATALOG = [
     {
         key: 'pullups',
+        program: 'calisthenics',
         title: 'Подтягивания',
         focus: 'Спина и хват',
         description: 'Прогрессия от вертикальной тяги до подтягиваний на одной руке.',
@@ -13,6 +14,7 @@ export const STATIC_EXERCISE_CATALOG = [
     },
     {
         key: 'pushups',
+        program: 'calisthenics',
         title: 'Отжимания',
         focus: 'Грудь и трицепс',
         description: 'От простых вариаций от стены до работы на одной руке.',
@@ -25,6 +27,7 @@ export const STATIC_EXERCISE_CATALOG = [
     },
     {
         key: 'squats',
+        program: 'calisthenics',
         title: 'Приседания',
         focus: 'Ноги и баланс',
         description: 'Постепенное усложнение до приседаний на одной ноге.',
@@ -37,6 +40,7 @@ export const STATIC_EXERCISE_CATALOG = [
     },
     {
         key: 'legRaises',
+        program: 'calisthenics',
         title: 'Кор и пресс',
         focus: 'Стабилизация корпуса',
         description: 'Развитие угла от подъёмов коленей до подъемов к перекладине.',
@@ -49,6 +53,7 @@ export const STATIC_EXERCISE_CATALOG = [
     },
     {
         key: 'handstand',
+        program: 'calisthenics',
         title: 'Стойка на руках',
         focus: 'Баланс и плечи',
         description: 'Уверенное удержание стойки и развитие контроля.',
@@ -61,6 +66,7 @@ export const STATIC_EXERCISE_CATALOG = [
     },
     {
         key: 'bridge',
+        program: 'calisthenics',
         title: 'Мост',
         focus: 'Подвижность и задняя цепь',
         description: 'Восстановление и мобилизация спины, грудного отдела и плеч.',

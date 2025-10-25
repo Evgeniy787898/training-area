@@ -9,17 +9,29 @@ const ExerciseCard = ({
 }) => {
     const latest = exercise.latest_progress;
 
+    const backgroundStyle = exercise.media?.image
+        ? { backgroundImage: `url(${exercise.media.image})` }
+        : { backgroundImage: 'linear-gradient(135deg, rgba(96,165,250,0.25), rgba(167,139,250,0.25))' };
+
     return (
         <div className={`card exercise-card ${expanded ? 'expanded' : ''}`}>
             <button className="exercise-header" onClick={() => onToggle(exercise.key)}>
-                <div>
+                <div className="exercise-preview" style={backgroundStyle} aria-hidden />
+                <div className="exercise-summary">
                     <h3>{exercise.title}</h3>
                     <p className="text-muted">{exercise.focus}</p>
+                    {exercise.tags && (
+                        <div className="exercise-tags">
+                            {exercise.tags.map(tag => (
+                                <span key={tag} className="tag-chip">{tag}</span>
+                            ))}
+                        </div>
+                    )}
                 </div>
                 <div className="exercise-meta">
                     {latest ? (
                         <>
-                            <span className="badge">Последний уровень: {latest.level || '—'}</span>
+                            <span className="badge">Уровень {latest.level || '—'}</span>
                             {latest.session_date && (
                                 <span className="badge muted">{latest.session_date}</span>
                             )}
@@ -41,6 +53,19 @@ const ExerciseCard = ({
 
                     {exercise.cue && (
                         <p className="exercise-cue">💡 {exercise.cue}</p>
+                    )}
+
+                    {exercise.media?.video && (
+                        <div className="exercise-media">
+                            <a
+                                className="btn btn-secondary"
+                                href={exercise.media.video}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                Смотреть видеоразбор
+                            </a>
+                        </div>
                     )}
 
                     <h4>Прогрессия</h4>
