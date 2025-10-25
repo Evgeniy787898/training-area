@@ -375,6 +375,7 @@ async function finalizeReport(ctx, notes) {
                     history: await db.getTrainingSessions(ctx.state.profileId, {
                         endDate: refreshedSession.date,
                     }),
+                    profile: ctx.state.profile,
                 });
 
                 const analysisText = analysis?.feedback

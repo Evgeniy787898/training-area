@@ -1,5 +1,4 @@
-import openai from './openaiClient.js';
-import config from '../config/env.js';
+import { createChatCompletion } from './llmGateway.js';
 
 // Системный промпт тренера
 const SYSTEM_PROMPT = `Ты — виртуальный тренер по функциональному тренингу и калистенике. 
@@ -33,8 +32,8 @@ export class PlannerService {
     /**
      * Генерирует тренировочный план на основе целей и истории пользователя
      */
-    async generateTrainingPlan(userContext) {
-        const { goals, equipment, recentSessions, constraints } = userContext;
+    async generateTrainingPlan(userContext = {}) {
+        const { goals = {}, equipment = [], recentSessions = [], constraints = {}, profile = null } = userContext;
 
         const userPrompt = this._buildUserPrompt({
             goals,
@@ -44,17 +43,19 @@ export class PlannerService {
         });
 
         try {
-            const completion = await openai.chat.completions.create({
-                model: config.openai.model,
+            const completion = await createChatCompletion({
                 messages: [
                     { role: 'system', content: SYSTEM_PROMPT },
                     { role: 'user', content: userPrompt },
                 ],
                 temperature: 0.7,
                 max_tokens: 2000,
+            }, {
+                profile,
+                allowLocal: false,
             });
 
-            const response = completion.choices[0].message.content;
+            const response = completion?.choices?.[0]?.message?.content;
             return this._parseTrainingPlanResponse(response);
         } catch (error) {
             console.error('Error generating training plan:', error);
@@ -65,8 +66,8 @@ export class PlannerService {
     /**
      * Анализирует отчёт о тренировке и даёт рекомендации
      */
-    async analyzeTrainingReport(reportContext) {
-        const { session, exercises, rpe, notes, history } = reportContext;
+    async analyzeTrainingReport(reportContext = {}) {
+        const { session, exercises, rpe, notes, history, profile = null } = reportContext;
 
         const analysisPrompt = this._buildAnalysisPrompt({
             session,
@@ -77,17 +78,19 @@ export class PlannerService {
         });
 
         try {
-            const completion = await openai.chat.completions.create({
-                model: config.openai.model,
+            const completion = await createChatCompletion({
                 messages: [
                     { role: 'system', content: SYSTEM_PROMPT },
                     { role: 'user', content: analysisPrompt },
                 ],
                 temperature: 0.7,
                 max_tokens: 1000,
+            }, {
+                profile,
+                allowLocal: false,
             });
 
-            const response = completion.choices[0].message.content;
+            const response = completion?.choices?.[0]?.message?.content;
             return {
                 feedback: response,
                 suggestions: this._extractSuggestions(response),
@@ -101,8 +104,8 @@ export class PlannerService {
     /**
      * Генерирует мотивационное сообщение
      */
-    async generateMotivationalMessage(context) {
-        const { adherence, progressData, currentStreak } = context;
+    async generateMotivationalMessage(context = {}) {
+        const { adherence, progressData, currentStreak, profile = null } = context;
 
         const prompt = `На основе данных пользователя создай короткое мотивационное сообщение (2-3 предложения):
 - Выполнено тренировок за 4 недели: ${adherence}%
@@ -112,17 +115,19 @@ export class PlannerService {
 Сообщение должно быть конкретным, опираться на факты и мотивировать продолжать.`;
 
         try {
-            const completion = await openai.chat.completions.create({
-                model: config.openai.model,
+            const completion = await createChatCompletion({
                 messages: [
                     { role: 'system', content: SYSTEM_PROMPT },
                     { role: 'user', content: prompt },
                 ],
                 temperature: 0.8,
                 max_tokens: 300,
+            }, {
+                profile,
+                allowLocal: false,
             });
 
-            return completion.choices[0].message.content;
+            return completion?.choices?.[0]?.message?.content;
         } catch (error) {
             console.error('Error generating motivational message:', error);
             return 'Отличная работа! Продолжай в том же духе 💪';

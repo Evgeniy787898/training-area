@@ -1,5 +1,5 @@
-import openai from './openaiClient.js';
-import config from '../config/env.js';
+import { createChatCompletion } from './llmGateway.js';
+import { detectIntent } from './nlu.js';
 
 const KNOWN_INTENTS = new Set([
     'plan_today',
@@ -117,22 +117,25 @@ class AiCommandRouter {
 
         let attempt = 0;
         let lastResult = null;
+        let lastError = null;
 
         while (attempt < 3) {
             attempt += 1;
 
             try {
-                const completion = await openai.chat.completions.create({
-                    model: config.openai.model,
-                    temperature: attempt === 1 ? 0 : 0.2,
-                    response_format: { type: 'json_object' },
+                const completion = await createChatCompletion({
                     messages: [
                         { role: 'system', content: SYSTEM_PROMPT },
                         { role: 'user', content: JSON.stringify(payload) },
                     ],
+                    temperature: attempt === 1 ? 0 : 0.2,
+                    response_format: { type: 'json_object' },
+                }, {
+                    profile,
+                    allowLocal: false,
                 });
 
-                const content = completion.choices?.[0]?.message?.content;
+                const content = completion?.choices?.[0]?.message?.content;
                 if (!content) {
                     continue;
                 }
@@ -156,16 +159,20 @@ class AiCommandRouter {
                 }
             } catch (error) {
                 console.error('AI command routing failed on attempt', attempt, error);
+                lastError = error;
+                if (error?.code && [
+                    'llm_provider_local',
+                    'llm_provider_unavailable',
+                    'openai_client_unavailable',
+                    'deepseek_api_key_missing',
+                ].includes(error.code)) {
+                    break;
+                }
             }
         }
 
         if (!lastResult) {
-            return {
-                intent: 'unknown',
-                confidence: 0,
-                slots: {},
-                candidate_intents: [],
-            };
+            return fallbackInterpret({ message, lastError });
         }
 
         if (lastResult.confidence < 0.4 && !lastResult.needs_clarification && lastResult.intent !== 'fallback_conversation') {
@@ -185,3 +192,79 @@ class AiCommandRouter {
 const aiCommandRouter = new AiCommandRouter();
 
 export default aiCommandRouter;
+
+function fallbackInterpret({ message, lastError }) {
+    if (lastError) {
+        console.warn('Fallback NLU engaged due to AI error:', lastError.message || lastError);
+    }
+
+    if (!message || typeof message !== 'string') {
+        return {
+            intent: 'fallback_conversation',
+            confidence: 0.45,
+            slots: {},
+            needs_clarification: false,
+            clarification_question: null,
+            assistant_reply: null,
+            candidate_intents: [],
+            secondary_intent: null,
+        };
+    }
+
+    const detected = detectIntent(message);
+    const intent = mapIntent(detected.intent);
+    const slots = buildSlots(intent, detected.entities);
+    const confidence = Math.max(detected.confidence || 0.5, 0.45);
+
+    return {
+        intent,
+        confidence,
+        slots,
+        needs_clarification: false,
+        clarification_question: null,
+        assistant_reply: null,
+        candidate_intents: [],
+        secondary_intent: null,
+    };
+}
+
+function mapIntent(intent) {
+    const intentMap = {
+        'plan.today': 'plan_today',
+        'plan.week': 'plan_week',
+        'plan.setup': 'plan_customize',
+        'report.start': 'report_start',
+        'stats.show': 'stats_show',
+        'settings.open': 'settings_open',
+        'schedule.reschedule': 'schedule_reschedule',
+        'recovery.mode': 'recovery_mode',
+        'remind.later': 'remind_later',
+        'motivation': 'motivation',
+        'help': 'help',
+    };
+
+    return intentMap[intent] || 'fallback_conversation';
+}
+
+function buildSlots(intent, entities = {}) {
+    if (!entities || typeof entities !== 'object') {
+        return {};
+    }
+
+    if (intent === 'remind_later' && entities.reminder) {
+        return { reminder: entities.reminder };
+    }
+
+    if (intent === 'schedule_reschedule') {
+        const slots = {};
+        if (Number.isFinite(entities.preferredShiftDays)) {
+            slots.preferred_shift_days = entities.preferredShiftDays;
+        }
+        if (entities.preferredDay) {
+            slots.preferred_day = entities.preferredDay;
+        }
+        return slots;
+    }
+
+    return {};
+}

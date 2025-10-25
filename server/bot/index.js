@@ -121,6 +121,8 @@ bot.on('text', async (ctx, next) => {
         const assistantReply = await resolveAssistantReply(decision, {
             profile,
             message: messageForRouter,
+            history,
+            mode: 'command',
         });
 
         const finalMessage = assistantReply || DEFAULT_FALLBACK_MESSAGE;
@@ -131,7 +133,7 @@ bot.on('text', async (ctx, next) => {
     }
 
     const assistantReply =
-        (await resolveAssistantReply(null, { profile, message: text })) || DEFAULT_FALLBACK_MESSAGE;
+        (await resolveAssistantReply(null, { profile, message: text, history, mode })) || DEFAULT_FALLBACK_MESSAGE;
     await sendFinalReply(ctx, progressMessage, assistantReply, { disable_web_page_preview: true });
     await saveHistory(profileId, history, text, assistantReply, 'conversation');
 
@@ -146,16 +148,18 @@ bot.catch((err, ctx) => {
     });
 });
 
-async function resolveAssistantReply(decision, { profile, message }) {
-    const formatted = formatAssistantReply(decision?.assistant_reply);
+async function resolveAssistantReply(decision, { profile, message, history = [], mode = 'chat' }) {
+    const formatted = formatAssistantReply(decision?.assistant_reply, mode);
     if (formatted) {
         return formatted;
     }
 
     try {
-        const aiReply = await conversationService.generateReply({ profile, message });
+        const aiReply = await conversationService.generateReply({ profile, message, history, mode });
         if (aiReply) {
-            return formatAssistantReply(aiReply) || aiReply;
+            return mode === 'command'
+                ? formatAssistantReply(aiReply, mode) || aiReply
+                : aiReply;
         }
     } catch (error) {
         console.error('Conversation reply failed:', error);
@@ -166,7 +170,7 @@ async function resolveAssistantReply(decision, { profile, message }) {
 
 function buildOpenWebAppResponse(aiMessage) {
     const message =
-        formatAssistantReply(aiMessage) || 'Готов открыть панель. Нажми на кнопку ниже, чтобы запустить приложение.';
+        formatAssistantReply(aiMessage, 'command') || 'Готов открыть панель. Нажми на кнопку ниже, чтобы запустить приложение.';
 
     if (config.app.webAppUrl) {
         const keyboard = Markup.inlineKeyboard([
@@ -188,15 +192,18 @@ function buildOpenWebAppResponse(aiMessage) {
     };
 }
 
-function formatAssistantReply(text) {
+function formatAssistantReply(text, mode = 'chat') {
     if (!text) {
         return null;
     }
 
-    return text
-        .replace(/\*\*(.+?)\*\*/g, (_, heading) => `${heading.toUpperCase()}:`)
-        .replace(/\n{3,}/g, '\n\n')
-        .trim();
+    let formatted = text.replace(/\n{3,}/g, '\n\n').trim();
+
+    if (mode === 'command') {
+        formatted = formatted.replace(/\*\*(.+?)\*\*/g, (_, heading) => `${heading.toUpperCase()}:`);
+    }
+
+    return formatted;
 }
 
 async function loadHistory(profileId) {

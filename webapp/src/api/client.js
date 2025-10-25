@@ -86,7 +86,17 @@ async function request(path, { method = 'GET', body, headers } = {}) {
         init.body = JSON.stringify(body);
     }
 
-    const response = await fetch(url, init);
+    let response;
+    try {
+        response = await fetch(url, init);
+    } catch (cause) {
+        const networkError = new Error('Не удалось установить соединение с API');
+        networkError.code = 'network_error';
+        networkError.status = 0;
+        networkError.cause = cause;
+        networkError.traceId = null;
+        throw networkError;
+    }
     const traceId = response.headers.get('x-trace-id');
     let payload = null;
 

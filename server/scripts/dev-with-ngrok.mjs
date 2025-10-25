@@ -114,7 +114,7 @@ async function start() {
     spawnProcess('npm', ['run', 'dev', '--', '--host', '0.0.0.0', '--port', String(VITE_PORT)], {
         cwd: webappDir,
         env: {
-            VITE_API_BASE_URL: DEFAULT_API_BASE,
+            VITE_DEV_API_PROXY_TARGET: DEFAULT_API_BASE,
         },
     });
 

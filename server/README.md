@@ -55,15 +55,33 @@ cp .env.example .env
 # Telegram Bot Token (от @BotFather)
 TELEGRAM_BOT_TOKEN=your_token
 
+# AI Providers
+AI_ALLOWED_PROVIDERS=openai,deepseek,local
+AI_DEFAULT_PROVIDER=openai
+
 # OpenAI API Key
 OPENAI_API_KEY=sk-proj-your_key
-# (optional) модель OpenAI, по умолчанию gpt-4o-mini
-OPENAI_MODEL=gpt-4o-mini
+# (optional) модель OpenAI, по умолчанию gpt-5
+OPENAI_MODEL=gpt-5
+# (optional) несколько ключей для ротации через запятую
+OPENAI_API_KEYS=sk-proj-another_key,sk-svcacct-backup_key
+# (optional) базовый URL или прокси (например, OpenRouter)
+OPENAI_API_BASE_URL=https://api.openai.com/v1
+# (optional) организация и проект для сервис-аккаунтов
+OPENAI_ORG=org-abc123
+OPENAI_PROJECT=proj_xyz # значение должно совпадать с идентификатором вида proj_*
+# (optional) кеширование ответов (миллисекунды)
+OPENAI_CACHE_TTL_MS=120000
 # (optional) ограничение параллелизма и повторов OpenAI-запросов
 OPENAI_MAX_CONCURRENCY=1
 OPENAI_MIN_INTERVAL_MS=800
 OPENAI_MAX_RETRIES=3
 OPENAI_RETRY_INITIAL_DELAY_MS=1000
+
+# DeepSeek (альтернативный провайдер)
+DEEPSEEK_API_KEY=
+DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_API_BASE_URL=https://api.deepseek.com/v1
 # (optional) ограничьте доступ конкретными аккаунтами
 TELEGRAM_ALLOWED_IDS=123456789,987654321
 

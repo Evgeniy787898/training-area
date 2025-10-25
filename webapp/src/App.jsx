@@ -23,6 +23,7 @@ const STANDALONE_USER = {
     username: import.meta.env.VITE_STANDALONE_USERNAME || undefined,
 };
 const STANDALONE_INIT_DATA = import.meta.env.VITE_STANDALONE_INIT_DATA || '';
+const ALLOW_DEMO_MODE = STANDALONE_MODE || import.meta.env.VITE_ALLOW_DEMO_MODE === '1';
 
 function App() {
     const [activeTab, setActiveTab] = useState('today');
@@ -108,14 +109,27 @@ function App() {
                 });
             } else {
                 setProfileError(error);
-                setProfileSummary(DEMO_PROFILE_SUMMARY);
-                setDemoMode(true);
-                pushToast({
-                    title: 'Демо режим',
-                    message: 'Не удалось связаться с сервером. Показаны примерочные данные.',
-                    type: 'warning',
-                    traceId: error.traceId,
-                });
+                if (ALLOW_DEMO_MODE) {
+                    setProfileSummary(DEMO_PROFILE_SUMMARY);
+                    setDemoMode(true);
+                    pushToast({
+                        title: 'Демо режим',
+                        message: 'Не удалось связаться с сервером. Показаны примерочные данные.',
+                        type: 'warning',
+                        traceId: error.traceId,
+                    });
+                } else {
+                    setProfileSummary(null);
+                    setDemoMode(false);
+                    pushToast({
+                        title: 'Нет соединения с API',
+                        message: error.code === 'network_error'
+                            ? 'Сервер недоступен. Проверь адрес API или повтори попытку позже.'
+                            : (error.message || 'Сервер вернул ошибку. Попробуй позже.'),
+                        type: 'error',
+                        traceId: error.traceId,
+                    });
+                }
             }
         } finally {
             setProfileLoading(false);

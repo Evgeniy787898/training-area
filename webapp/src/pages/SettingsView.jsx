@@ -7,6 +7,7 @@ const SettingsView = () => {
     const [form, setForm] = useState({
         notification_time: '06:00',
         notifications_paused: false,
+        ai_provider: '',
     });
     const [saving, setSaving] = useState(false);
 
@@ -16,9 +17,16 @@ const SettingsView = () => {
         }
 
         const notification = profileSummary.profile.notification_time?.slice(0, 5) || '06:00';
+        const providerOptions = profileSummary.ai?.providers || [];
+        const resolvedProvider = profileSummary.profile.preferences?.ai_provider
+            || profileSummary.ai?.selected_provider
+            || providerOptions.find(option => option.available)?.id
+            || providerOptions[0]?.id
+            || 'local';
         setForm({
             notification_time: notification,
             notifications_paused: profileSummary.profile.notifications_paused || false,
+            ai_provider: resolvedProvider,
         });
     }, [profileSummary]);
 
@@ -37,6 +45,7 @@ const SettingsView = () => {
             const payload = {
                 notification_time: form.notification_time,
                 notifications_paused: form.notifications_paused,
+                ai_provider: form.ai_provider,
             };
             await apiClient.updatePreferences(payload);
             showToast({ title: 'Настройки обновлены', type: 'success' });
@@ -74,6 +83,33 @@ const SettingsView = () => {
                         checked={form.notifications_paused}
                         onChange={handleChange}
                     />
+                </div>
+
+                <div className="form-field">
+                    <label htmlFor="ai_provider">Движок ИИ</label>
+                    <select
+                        id="ai_provider"
+                        name="ai_provider"
+                        value={form.ai_provider}
+                        onChange={handleChange}
+                    >
+                        {(profileSummary?.ai?.providers || []).map(provider => (
+                            <option key={provider.id} value={provider.id} disabled={!provider.available}>
+                                {provider.label}{provider.available ? '' : ' (недоступно)'}
+                            </option>
+                        ))}
+                    </select>
+                    <p className="text-muted">
+                        {(profileSummary?.ai?.providers || []).find(option => option.id === form.ai_provider)?.description
+                            || 'Выбери движок ИИ для ответов и генерации планов.'}
+                    </p>
+                    {(() => {
+                        const provider = (profileSummary?.ai?.providers || []).find(option => option.id === form.ai_provider);
+                        if (provider && !provider.available && provider.status_message) {
+                            return <p className="text-warning">{provider.status_message}</p>;
+                        }
+                        return null;
+                    })()}
                 </div>
 
                 <button className="btn btn-primary" type="submit" disabled={saving}>
