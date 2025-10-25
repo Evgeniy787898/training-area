@@ -23,43 +23,6 @@ const requestSchema = z.object({
   forceFallback: z.boolean().optional(),
 });
 
-const aiPlanSchema = z.object({
-  sessions: z.array(z.object({
-    date: z.string(),
-    session_type: z.string(),
-    status: z.string().optional(),
-    focus: z.string().optional(),
-    intensity: z.string().optional(),
-    notes: z.string().optional(),
-    rpe: z.number().min(1).max(10).optional(),
-    source: z.string().optional(),
-    exercises: z
-      .array(
-        z.object({
-          exercise_key: z.string(),
-          name: z.string(),
-          target: z
-            .object({
-              sets: z.number().int().positive().optional(),
-              reps: z.number().int().positive().optional(),
-              duration_seconds: z.number().int().positive().optional(),
-            })
-            .partial()
-            .optional(),
-          cues: z.array(z.string()).optional(),
-          notes: z.string().optional(),
-          rpe: z.number().min(1).max(10).optional(),
-        }),
-      )
-      .optional(),
-  })),
-  summary: z.record(z.unknown()).optional(),
-  metadata: z.record(z.unknown()).optional(),
-});
-
-const openAiKey = Deno.env.get("OPENAI_API_KEY");
-const openAiModel = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini";
-
 serve(async (req: Request): Promise<Response> => {
   const cors = handleCors(req);
   if (cors) {
@@ -193,7 +156,7 @@ async function generatePlan({
   reason,
   recentSessions,
   reference,
-  useFallbackOnly,
+  useFallbackOnly: _useFallbackOnly,
   traceId,
 }: {
   profile: Record<string, unknown>;
@@ -203,29 +166,18 @@ async function generatePlan({
   useFallbackOnly: boolean;
   traceId: string;
 }): Promise<{ plan: GeneratedPlan; generator: string }> {
-  if (!useFallbackOnly && openAiKey) {
-    try {
-      const planFromAi = await generatePlanWithOpenAI({
-        profile,
-        reason,
-        recentSessions,
-        reference,
-        traceId,
-      });
+  const internalPlan = buildInternalPlan({
+    profile,
+    reason,
+    recentSessions,
+    reference,
+    traceId,
+  });
 
-      if (planFromAi) {
-        return { plan: planFromAi, generator: "openai" };
-      }
-    } catch (error) {
-      console.warn("update_plan: AI generation failed, fallback engaged", error);
-    }
-  }
-
-  const fallback = buildFallbackPlan(profile, reference, reason);
-  return { plan: fallback, generator: "fallback" };
+  return { plan: internalPlan, generator: "internal" };
 }
 
-async function generatePlanWithOpenAI({
+function buildInternalPlan({
   profile,
   reason,
   recentSessions,
@@ -237,146 +189,112 @@ async function generatePlanWithOpenAI({
   recentSessions: Array<Record<string, unknown>>;
   reference: Date;
   traceId: string;
-}): Promise<GeneratedPlan | null> {
-  const prompt = buildPlanPrompt({ profile, reason, recentSessions, reference });
+}): GeneratedPlan {
+  const base = buildFallbackPlan(profile, reference, reason);
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${openAiKey}`,
-      "x-trace-id": traceId,
-    },
-    body: JSON.stringify({
-      model: openAiModel,
-      temperature: 0.7,
-      max_tokens: 1800,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            "Ты — виртуальный тренер по функциональному тренингу. Всегда отвечай в формате JSON, соответствуя схеме планирования.",
-        },
-        { role: "user", content: prompt },
-      ],
-    }),
+  const recentSummary = recentSessions
+    .slice(0, 3)
+    .map((session) => {
+      const sessionDate = session.date ? new Date(String(session.date)) : null;
+      return {
+        date: sessionDate ? formatDate(sessionDate) : null,
+        session_type: session.session_type ?? "unknown",
+        status: session.status ?? "unknown",
+        rpe: session.rpe ?? null,
+      };
+    });
+
+  const sessions = base.sessions.map((session) => {
+    const annotated: PlanSession = {
+      ...session,
+      source: "internal",
+      notes: buildSessionNotes(session, { profile, reason }),
+      intensity: adjustIntensity(session, { profile, reason }),
+    };
+
+    if (session.status === "rest" && reason.includes("injury")) {
+      annotated.notes = `${annotated.notes || ""} Дополнительное внимание на мягкой мобилизации и дыхании.`.trim();
+    }
+
+    return annotated;
   });
 
-  if (!response.ok) {
-    const errorBody = await response.text();
-    console.error("update_plan: OpenAI API error", response.status, errorBody);
-    return null;
-  }
-
-  const completion = await response.json();
-  const content: string | undefined = completion?.choices?.[0]?.message?.content;
-  if (!content) {
-    console.warn("update_plan: OpenAI response missing content");
-    return null;
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content);
-  } catch (error) {
-    console.error("update_plan: failed to parse OpenAI JSON", error, content);
-    return null;
-  }
-
-  const validated = aiPlanSchema.safeParse(parsed);
-  if (!validated.success) {
-    console.error("update_plan: OpenAI plan validation failed", validated.error);
-    return null;
-  }
-
-  const basePlan = buildFallbackPlan(profile, reference, reason);
-  const sanitizedSessions: PlanSession[] = validated.data.sessions.map((session) => ({
-    date: sanitizeDate(session.date, reference),
-    session_type: session.session_type,
-    status: session.status ?? "planned",
-    focus: session.focus,
-    intensity: session.intensity,
-    notes: session.notes,
-    rpe: session.rpe,
-    source: session.source ?? "openai",
-    exercises: (session.exercises ?? []).map((exercise) => ({
-      exercise_key: exercise.exercise_key,
-      name: exercise.name,
-      target: exercise.target,
-      cues: exercise.cues,
-      notes: exercise.notes,
-      rpe: exercise.rpe,
-    })),
-  }));
-
-  const plan: GeneratedPlan = {
-    sessions: sanitizedSessions.length ? sanitizedSessions : basePlan.sessions,
+  return {
+    sessions,
     summary: {
-      ...(validated.data.summary ?? {}),
+      ...base.summary,
+      generator: "internal",
       reason,
-      generator: "openai",
-      source_trace_id: traceId,
+      recent_sessions: recentSummary,
+      trace_id: traceId,
     },
     metadata: {
-      ...(validated.data.metadata ?? {}),
+      ...base.metadata,
+      generator: "internal",
       generated_at: new Date().toISOString(),
-      week_start: getWeekRange(reference).weekStartStr,
-      week_end: getWeekRange(reference).weekEndStr,
-      generator: "openai",
+      adjustments: buildAdjustmentHints({ profile, reason }),
     },
   };
-
-  return plan;
 }
 
-function sanitizeDate(date: string, reference: Date): string {
-  if (!date) {
-    return formatDate(reference);
-  }
-  const parsed = new Date(date);
-  if (Number.isNaN(parsed.getTime())) {
-    return formatDate(reference);
-  }
-  return formatDate(parsed);
-}
-
-function buildPlanPrompt({
+function buildSessionNotes(session: PlanSession, {
   profile,
   reason,
-  recentSessions,
-  reference,
 }: {
   profile: Record<string, unknown>;
   reason: string;
-  recentSessions: Array<Record<string, unknown>>;
-  reference: Date;
-}): string {
-  const goals = profile?.goals ?? {};
-  const equipment = Array.isArray(profile?.equipment) ? profile?.equipment : [];
-  const frequency = Number(profile?.preferences?.training_frequency ?? 4) || 4;
+}): string | null {
+  const baseNotes = session.notes || "";
+  const notes: string[] = baseNotes ? [baseNotes] : [];
 
-  const recent = recentSessions
-    .slice(0, 4)
-    .map((session) =>
-      `- ${session.date}: ${session.session_type ?? "Тренировка"} (status: ${session.status ?? "n/a"}, rpe: ${session.rpe ?? "n/a"})`
-    )
-    .join("\n");
+  if (reason.includes("recovery") || profile?.flags?.recovery_mode) {
+    notes.push("Фокус на восстановлении: держи RPE 6–7, следи за дыханием.");
+  }
 
-  return `Сформируй план тренировок на неделю, начиная с ${formatDate(reference)}. Ответ в JSON с полями sessions (массив) и summary.
-Каждая тренировка:
-- поля date (в формате YYYY-MM-DD), session_type, status, focus, intensity, notes, rpe.
-- exercises: массив объектов с полями exercise_key, name, target (sets/reps/duration_seconds), cues, notes.
+  if (reason.includes("progress")) {
+    notes.push("Добавь контроль техники: видео повторений или заметки помогут точнее адаптировать план.");
+  }
 
-Контекст:
-- Цели: ${JSON.stringify(goals)}
-- Доступное оборудование: ${equipment.join(", ") || "только вес тела"}
-- Частота: ${frequency} тренировок в неделю
-- Причина обновления: ${reason}
-- История:
-${recent || "нет данных"}
+  return notes.length ? notes.join(" ") : null;
+}
 
-Обязательно включай хотя бы один день восстановления с пустым списком упражнений.`;
+function adjustIntensity(session: PlanSession, {
+  profile,
+  reason,
+}: {
+  profile: Record<string, unknown>;
+  reason: string;
+}): string | undefined {
+  if (profile?.flags?.recovery_mode || reason.includes("recovery")) {
+    if (session.status === "rest") {
+      return "восстановление";
+    }
+    return "умеренная";
+  }
+
+  return session.intensity;
+}
+
+function buildAdjustmentHints({
+  profile,
+  reason,
+}: {
+  profile: Record<string, unknown>;
+  reason: string;
+}): Record<string, unknown> {
+  const hints: Record<string, unknown> = {
+    reason,
+  };
+
+  if (profile?.flags?.recovery_mode || reason.includes("recovery")) {
+    hints.mode = "recovery";
+  }
+
+  if (profile?.preferences?.training_frequency) {
+    hints.frequency = profile.preferences.training_frequency;
+  }
+
+  return hints;
 }
 
 async function persistPlan({
@@ -400,117 +318,27 @@ async function persistPlan({
     .eq("profile_id", profileId)
     .eq("is_active", true);
 
-  const { data: lastVersionData, error: lastVersionError } = await supabase
-    .from("plan_versions")
-    .select("version")
-    .eq("profile_id", profileId)
-    .order("version", { ascending: false })
-    .limit(1);
-
-  if (lastVersionError) {
-    console.error("update_plan: failed to load latest version", lastVersionError);
-    throw lastVersionError;
-  }
-
-  const nextVersion = (lastVersionData?.[0]?.version ?? 0) + 1;
-
-  const summaryPayload = {
-    ...plan.summary,
-    metadata: plan.metadata,
-    week_start: weekStartStr,
-    week_end: weekEndStr,
-  };
-
-  const { data: insertedPlan, error: insertPlanError } = await supabase
+  const { data, error } = await supabase
     .from("plan_versions")
     .insert({
       profile_id: profileId,
-      version: nextVersion,
-      summary: summaryPayload,
+      plan,
       is_active: true,
-      activated_at: nowIso,
+      version_start: weekStartStr,
+      version_end: weekEndStr,
+      metadata: {
+        trace_id: traceId,
+      },
     })
-    .select()
+    .select("id, version")
     .single();
 
-  if (insertPlanError) {
-    console.error("update_plan: failed to insert plan version", insertPlanError);
-    throw insertPlanError;
+  if (error) {
+    console.error("update_plan: failed to persist plan", error);
+    throw error;
   }
 
-  const itemsPayload = plan.sessions.map((session) => ({
-    plan_version_id: insertedPlan.id,
-    slot_date: session.date,
-    payload: session,
-    slot_status: session.status ?? "planned",
-  }));
-
-  if (itemsPayload.length) {
-    const { error: insertItemsError } = await supabase
-      .from("plan_version_items")
-      .insert(itemsPayload);
-
-    if (insertItemsError) {
-      console.error("update_plan: failed to insert plan items", insertItemsError);
-      throw insertItemsError;
-    }
-  }
-
-  const { error: deleteSessionsError } = await supabase
-    .from("training_sessions")
-    .delete()
-    .eq("profile_id", profileId)
-    .gte("date", weekStartStr)
-    .lte("date", weekEndStr);
-
-  if (deleteSessionsError) {
-    console.error("update_plan: failed to clean week sessions", deleteSessionsError);
-    throw deleteSessionsError;
-  }
-
-  const actionableSessions = plan.sessions.filter((session) =>
-    session.exercises && session.exercises.length > 0
-  );
-
-  if (actionableSessions.length) {
-    const { error: insertSessionsError } = await supabase
-      .from("training_sessions")
-      .insert(
-        actionableSessions.map((session) => ({
-          profile_id: profileId,
-          date: session.date,
-          session_type: session.session_type,
-          exercises: session.exercises,
-          status: session.status === "rest" ? "planned" : session.status ?? "planned",
-          rpe: session.rpe ?? null,
-          notes: session.notes ?? null,
-          trace_id: traceId,
-        })),
-      );
-
-    if (insertSessionsError) {
-      console.error("update_plan: failed to insert week sessions", insertSessionsError);
-      throw insertSessionsError;
-    }
-  }
-
-  const expiresAt = new Date(weekEndStr);
-  expiresAt.setUTCDate(expiresAt.getUTCDate() + 2);
-
-  await supabase
-    .from("dialog_states")
-    .upsert(
-      {
-        profile_id: profileId,
-        state_type: "ui_cached_plan",
-        state_payload: { plan },
-        expires_at: expiresAt.toISOString(),
-        updated_at: nowIso,
-      },
-      { onConflict: "profile_id,state_type" },
-    );
-
-  return { planVersionId: insertedPlan.id, version: nextVersion };
+  return { planVersionId: data.id, version: data.version };
 }
 
 async function logPlanUpdate({
@@ -530,24 +358,14 @@ async function logPlanUpdate({
   weekStartStr: string;
   weekEndStr: string;
 }) {
-  await supabase.from("observability_events").insert({
+  await supabase.from("plan_generation_log").insert({
     profile_id: profileId,
-    category: "plan_update",
-    severity: "info",
-    payload: {
-      reason,
-      generator,
-      week_start: weekStartStr,
-      week_end: weekEndStr,
-      sessions: plan.sessions.length,
-    },
+    generator,
+    reason,
     trace_id: traceId,
-  });
-
-  await supabase.from("operation_log").insert({
-    profile_id: profileId,
-    action: "edge:update_plan",
-    status: "success",
-    payload_hash: reason,
+    week_start: weekStartStr,
+    week_end: weekEndStr,
+    plan_summary: plan.summary,
+    sessions: plan.sessions.length,
   });
 }

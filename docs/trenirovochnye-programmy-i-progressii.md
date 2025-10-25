@@ -309,8 +309,8 @@
 
 ## Синхронизация с базой данных и чат-ботом
 - Таблица `training_sessions` хранит поле `plan_source` (`default_program`, `custom`, `mini_cycle`) для отслеживания происхождения плана.
-- Пользовательские изменения из WebApp записываются в `plan_version_items` с флагом `customized=true`, чтобы ChatGPT учитывал модификации.
+- Пользовательские изменения из WebApp записываются в `plan_version_items` с флагом `customized=true`, чтобы внутренний движок учитывал модификации.
 - Настройки интенсивности (`intensity_profile`: `balanced`, `strength`, `endurance`) сохраняются в `profiles.preferences` и подмешиваются в промпт планировщика.
 - При смене программы бот подтверждает в чате и создаёт запись в `observability_events` (`event_type = program_switch`).
 - API между WebApp и ботом: событие `program_update` → payload `{ "frequency": 4, "intensity_profile": "strength", "custom_exercises": ["австралийские подтягивания"] }`.
-- Ограничения: не более 3 кастомных упражнений на день; дубликаты автоматически сливаются (ChatGPT предупреждает).
+- Ограничения: не более 3 кастомных упражнений на день; дубликаты автоматически сливаются (движок предупреждает).
